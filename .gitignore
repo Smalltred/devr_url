@@ -5,6 +5,14 @@
 /.pnp
 .pnp.js
 
+# PHP backend
+/backend/vendor/
+/backend/.env
+/backend/storage/logs/*.log
+/backend/.php-cs-fixer.cache
+/backend/.phpunit.result.cache
+/backend/.phpunit.cache/
+
 # testing
 /coverage
 
@@ -23,3 +31,6 @@ yarn-debug.log*
 yarn-error.log*
 
 .env
+
+# SQLite database
+/backend/storage/*.sqlite3*

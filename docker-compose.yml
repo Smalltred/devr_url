@@ -1,0 +1,29 @@
+# docker-compose：nginx(web) + php-fpm(app) 双容器部署，短链数据经 SQLite 永久化
+# 用法：
+#   docker compose up -d --build
+#   访问 http://localhost:3001
+# 数据库文件在命名卷 app-data 中（容器内 /app/backend/storage），重建容器不丢数据。
+services:
+  web:
+    build:
+      context: .
+      target: web
+    ports:
+      - "3001:80"
+    depends_on:
+      - app
+
+  app:
+    build:
+      context: .
+      target: app
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      # DATABASE_PATH 留空使用默认值 /app/backend/storage/short-url.sqlite3
+      # DATABASE_PATH:
+    volumes:
+      - app-data:/app/backend/storage
+
+volumes:
+  app-data:

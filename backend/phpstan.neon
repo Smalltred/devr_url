@@ -1,0 +1,14 @@
+parameters:
+    level: 8
+    paths:
+        - app
+        - config
+        - public
+        - routes
+        - tests
+    excludePaths:
+        analyse:
+            - tests/Compat/expected_codes.php
+    bootstrapFiles:
+        - vendor/autoload.php
+    treatPhpDocTypesAsCertain: false

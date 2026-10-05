@@ -1,0 +1,12 @@
+.git
+.github
+build
+node_modules
+backend/vendor
+backend/storage/logs/*.log
+backend/tests
+backend/tools
+docs
+deploy/nginx/short-url.conf
+docker-compose.yml
+*.md
