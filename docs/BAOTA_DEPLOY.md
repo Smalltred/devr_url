@@ -29,7 +29,7 @@ cd short-url
 ## 3. 安装依赖与构建
 
 ```bash
-# 前端构建（生成 build 目录，不要删除）
+# 前端构建（生成 dist 目录，不要删除）
 npm install
 npm run build
 
@@ -70,7 +70,7 @@ chmod -R 775 /www/wwwroot/short-url/backend/storage
 宝塔 → 网站 → 添加站点：
 
 - 域名：你的域名
-- 根目录：`/www/wwwroot/short-url/build`   ← 注意是 build，不是 short-url
+- 根目录：`/www/wwwroot/short-url/dist`   ← 注意是 dist，不是 short-url
 - PHP 版本：8.2
 - 不创建数据库
 
@@ -149,7 +149,7 @@ curl -sI https://你的域名/ | head -1
 | `{"error":"Service Unavailable"}` | SQLite 打不开：检查 `DATABASE_PATH` 目录是否存在且对 www 可写（`chown -R www:www backend/storage`） |
 | 创建返回 400 | URL 必须以 http(s):// 开头且无空白字符 |
 | 日志无内容/报权限错 | `chown -R www:www backend/storage`；日志在 `backend/storage/logs/app.log`、`error.log` |
-| 页面白屏/资源 404 | 根目录未指向 `build/`，或未执行 `npm run build` |
+| 页面白屏/资源 404 | 根目录未指向 `dist/`，或未执行 `npm run build` |
 
 ## 9. 安全清单
 

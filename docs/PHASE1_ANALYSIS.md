@@ -22,7 +22,7 @@ React 18 (CRA5, 端口3000)          Node.js Express (server.js, 端口3001)    
 - **后端**：单文件 `server.js`，同时用 `express.static('build')` 托管前端构建产物（方式二/三部署）。
 - **依赖分工**：`express / redis / dotenv / morgan` 仅服务端；`axios / qrcode / copy-to-clipboard / file-saver /
   @reduxjs/toolkit / react / react-dom` 仅前端；`tailwindcss`（devDep）前端样式。
-- **部署**：fly.io + Docker（node:16-alpine 内 `npm run build` 后 `npm run server`）；GitHub Actions push master 自动部署。
+- **部署**：Docker（node:16-alpine 内 `npm run build` 后 `npm run server`）；push master 由 GitHub Actions 自动部署到容器托管平台。
   `Jenkinsfile` 仅有一个错误阶段（`sh 'node build'`），属于废弃残留。
 
 ## 2. 当前 API 分析
@@ -145,7 +145,7 @@ short-url/
 │   ├── composer.json / phpunit.xml / phpstan.neon / .php-cs-fixer.dist.php
 │   └── Dockerfile                 # php-fpm 镜像（compose 用）
 ├── src/ public/ tailwind.config.js # React 前端（原样保留）
-├── Dockerfile                     # 多阶段：node 构建 React + nginx+php-fpm 单容器（fly.io）
+├── Dockerfile                     # 多阶段：node 构建 React + nginx+php-fpm 单容器
 ├── docker-compose.yml             # nginx + php-fpm + redis 三容器
 ├── deploy/nginx/*.conf            # 通用(宝塔) / docker 单容器 / compose 三种配置
 ├── .env.example                   # PHP 后端 + React 前端变量

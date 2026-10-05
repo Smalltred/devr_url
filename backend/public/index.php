@@ -10,7 +10,7 @@ if (PHP_SAPI === 'cli-server') {
     }
 
     $safePath = str_replace(['\\', "\0"], '', $path);
-    foreach ([dirname(__DIR__, 2).'/build', dirname(__DIR__, 2).'/public'] as $staticRoot) {
+    foreach ([dirname(__DIR__, 2).'/dist', dirname(__DIR__, 2).'/public'] as $staticRoot) {
         $file = $staticRoot.$safePath;
         if (is_file($file)) {
             header('Content-Type: '.static_mime($file));

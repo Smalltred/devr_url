@@ -70,7 +70,7 @@ HTTP/1.1 404 Not Found
 }
 ```
 
-- 静态资源（`/`、`/favicon.ico`、`/static/*` 等）由 Nginx 直接返回 React 页面，不进入 PHP。
+- 静态资源（`/`、`/favicon.ico`、`/assets/*` 等）由 Nginx 直接返回 Vue 页面，不进入 PHP。
 
 ## 状态码约定
 
@@ -105,5 +105,5 @@ curl -s http://localhost:3001/zzzzzz
 
 ## 前端对接
 
-React 前端调用 `POST /url`（见 `src/services/entity.js`），API 地址由构建时环境变量
-`REACT_APP_API_BASE_URL` 决定，留空为同源（推荐，配合 Nginx 反代），不会硬编码域名。
+Vue 3 前端调用 `POST /url`（见 `src/services/entity.js`），API 地址由构建时环境变量
+`VITE_API_BASE_URL` 决定，留空为同源（推荐，配合 Nginx 反代），不会硬编码域名。

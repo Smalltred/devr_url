@@ -1,6 +1,6 @@
 .git
 .github
-build
+dist
 node_modules
 backend/vendor
 backend/storage/logs/*.log

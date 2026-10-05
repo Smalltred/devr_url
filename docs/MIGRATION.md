@@ -3,7 +3,8 @@
 本文记录 short-url 后端从 Node.js/Express 迁移到 PHP 8.2 的完整变更清单、行为差异与回滚方案。
 
 > **历史文档说明**：本文写作时存储层为 Redis；2026-10 起存储层已从 Redis 迁移到 SQLite，
-> 见 [docs/SQLITE_MIGRATION.md](SQLITE_MIGRATION.md)。文中 Redis 相关描述保留作历史记录。
+> 见 [docs/SQLITE_MIGRATION.md](SQLITE_MIGRATION.md)。同期前端已用 Vue 3 + Vite 重写（原 React 代码退役），
+> 见 README。文中 Redis/React 相关描述保留作历史记录。
 
 ## 1. 迁移总览
 
@@ -72,7 +73,7 @@
 | `server.rest` | 仅用于调试 Express 接口 |
 | `Jenkinsfile` | 内容为错误命令（`sh 'node build'`），且未被任何流水线引用 |
 
-保留：`.github/workflows/fly.yml`（Dockerfile 默认 target 已适配，fly.io 部署链路不变）。
+移除：`fly.toml` 与 `.github/workflows/fly.yml`（原 fly.io 部署链路，不再使用 fly.io 托管）。
 
 ## 7. 部署拓扑变化
 
@@ -83,7 +84,7 @@
 ```
 
 - Docker Compose：`web`(nginx) + `app`(php-fpm) + `redis` 三容器；
-- 单容器（fly.io）：nginx + php-fpm 由 supervisord 托管；
+- 单容器：nginx + php-fpm 由 supervisord 托管；
 - 宝塔：站点根指向 `build/`，伪静态转发见 `deploy/nginx/short-url.conf` 与 `docs/BAOTA_DEPLOY.md`。
 
 ## 8. 回滚方案
