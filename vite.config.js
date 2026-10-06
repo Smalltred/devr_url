@@ -7,9 +7,12 @@ export default defineConfig({
     server: {
         port: 3000,
         proxy: {
-            '/url': 'http://127.0.0.1:3001',
+            // changeOrigin:false 保留浏览器原始 Host 头（localhost:3000）：
+            // 后端 CSRF 以 Host 头为同源基准（见 backend/app/Security/CsrfGuard.php），
+            // Vite 6 默认改写 Host 为代理目标，会导致开发环境所有写请求 403
+            '/url': { target: 'http://127.0.0.1:3001', changeOrigin: false },
             // 覆盖 /api/url、/api/auth/*、/api/admin/* 全部规范化接口
-            '/api': 'http://127.0.0.1:3001',
+            '/api': { target: 'http://127.0.0.1:3001', changeOrigin: false },
         },
     },
 })

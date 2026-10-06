@@ -350,13 +350,13 @@ function showNotice(message) {
                 <LinkStatsModal v-if="statsCode" :code="statsCode" @close="statsCode = ''" />
             </transition>
 
-            <!-- 轻提示 -->
-            <transition name="toast">
-                <div v-if="notice" class="toast fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
-                    {{ notice }}
-                </div>
-            </transition>
         </div>
+        <!-- 轻提示：挂在根层级，不受状态切换与入场动画影响，fixed 始终相对视窗 -->
+        <transition name="toast">
+            <div v-if="notice" class="toast fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
+                {{ notice }}
+            </div>
+        </transition>
     </div>
 </template>
 

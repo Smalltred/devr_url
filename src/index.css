@@ -460,7 +460,9 @@
     }
 }
 .page-in {
-    animation: page-in var(--duration-normal) var(--ease) both;
+    /* backwards：动画结束后不残留 transform。残留的 transform 会改变 fixed 定位的
+       包含块，导致 toast / 弹窗遮罩相对内容容器而非视窗定位 */
+    animation: page-in var(--duration-normal) var(--ease) backwards;
 }
 
 /* 选项卡内容切换 */
