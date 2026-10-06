@@ -1,8 +1,9 @@
-# docker-compose：nginx(web) + php-fpm(app) 双容器部署，短链数据经 SQLite 永久化
+# docker-compose：nginx(web) + php-fpm(app) + memcached 三容器部署，短链数据经 SQLite 永久化
 # 用法：
 #   docker compose up -d --build
 #   访问 http://localhost:3001
 # 数据库文件在命名卷 app-data 中（容器内 /app/backend/storage），重建容器不丢数据。
+# 短链跳转结果缓存在 memcached 中（命中即免查库）；memcached 不可用时自动降级为直连数据库。
 services:
   web:
     build:
@@ -33,10 +34,22 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       # 确认全站 HTTPS 后再设为 31536000 启用 HSTS
       HSTS_MAX_AGE: ${HSTS_MAX_AGE:-0}
+      # 缓存（Memcached）：指向下方 memcached 服务；CACHE_DRIVER=none 可显式关闭
+      MEMCACHED_SERVERS: memcached:11211
+      CACHE_TTL: ${CACHE_TTL:-300}
+      CACHE_NEGATIVE_TTL: ${CACHE_NEGATIVE_TTL:-30}
       # DATABASE_PATH 留空使用默认值 /app/backend/storage/short-url.sqlite3
       # DATABASE_PATH:
     volumes:
       - app-data:/app/backend/storage
+    depends_on:
+      - memcached
+
+  memcached:
+    image: memcached:1.6-alpine
+    # 仅 app 容器需要访问，不对外暴露端口；内存上限按站点规模调整
+    command: ["memcached", "-m", "64", "-c", "1024", "-I", "1m"]
+    restart: unless-stopped
 
 volumes:
   app-data:

@@ -29,6 +29,8 @@ const editing = ref(null)
 const statsCode = ref('')
 // 待确认删除的短链，非空时显示主题确认弹窗
 const pendingDelete = ref(null)
+// 退出登录请求进行中：按钮转 spinner 防重复提交
+const loggingOut = ref(false)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
 
@@ -55,11 +57,19 @@ async function onLoggedIn() {
 }
 
 async function onLoggedOut() {
+    if (loggingOut.value) {
+        return
+    }
+    loggingOut.value = true
     try {
         await api.logout()
     } finally {
+        loggingOut.value = false
         authState.value = 'login'
         overview.value = null
+        // 列表数据一并清空，避免重新登录后短暂显示上一会话的数据
+        items.value = []
+        total.value = 0
     }
 }
 
@@ -157,7 +167,10 @@ function showNotice(message) {
             key="checking"
             class="page-in flex min-h-screen items-center justify-center"
         >
-            <div class="glass card animate-pulse text-sm text-ink-2">正在验证登录态…</div>
+            <div class="glass card flex items-center gap-2 text-sm text-ink-2">
+                <span class="spinner" aria-hidden="true"></span>
+                正在验证登录态…
+            </div>
         </div>
 
         <div v-else key="ready" class="page-in py-6 pb-20">
@@ -167,7 +180,10 @@ function showNotice(message) {
                 <div class="flex items-center gap-2">
                     <ThemeToggle />
                     <a href="/" class="btn btn-ghost btn-sm">← 返回首页</a>
-                    <button type="button" class="btn btn-secondary btn-sm" @click="onLoggedOut">退出登录</button>
+                    <button type="button" class="btn btn-secondary btn-sm" :disabled="loggingOut" @click="onLoggedOut">
+                        <span v-if="loggingOut" class="spinner" aria-hidden="true"></span>
+                        {{ loggingOut ? '退出中…' : '退出登录' }}
+                    </button>
                 </div>
             </div>
 
@@ -177,154 +193,160 @@ function showNotice(message) {
                 <button type="button" :class="{ active: tab === 'settings' }" @click="tab = 'settings'">设置</button>
             </div>
 
-            <transition name="fade-slide" mode="out-in">
-                <AdminSettings
-                    v-if="tab === 'settings'"
-                    key="settings"
-                    @password-changed="onPasswordChanged"
-                    @notice="showNotice"
-                />
+            <!-- 面板常驻（v-show）：切换仅切显示，不重新挂载、不重载数据。
+                 display 切换会重放 page-in keyframes，入场淡入保留，且无过渡类滞留风险 -->
+            <AdminSettings
+                v-show="tab === 'settings'"
+                class="page-in"
+                @password-changed="onPasswordChanged"
+                @notice="showNotice"
+            />
 
-                <div v-else key="links">
+            <div v-show="tab === 'links'">
+                <!-- 登录后首次拉取：概览未就绪时给出加载反馈 -->
+                <div v-if="loading && !overview" class="glass card mb-6 flex items-center gap-2 text-sm text-ink-2">
+                    <span class="spinner" aria-hidden="true"></span>
+                    正在加载后台数据…
+                </div>
+
                 <!-- 概览卡片 -->
                 <div v-if="overview" class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div class="glass card">
-                    <div class="tnum text-3xl font-semibold">{{ overview.links }}</div>
-                    <div class="mt-1 text-sm text-ink-2">短链总数</div>
-                </div>
-                <div class="glass card">
-                    <div class="tnum text-3xl font-semibold">{{ overview.total_clicks }}</div>
-                    <div class="mt-1 text-sm text-ink-2">累计点击</div>
-                </div>
-                <div class="glass card">
-                    <div class="tnum text-3xl font-semibold">{{ overview.clicks_today }}</div>
-                    <div class="mt-1 text-sm text-ink-2">今日点击</div>
-                </div>
-            </div>
-
-            <!-- 全站趋势 + Top10 -->
-            <div v-if="overview" class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <div class="glass card lg:col-span-2">
-                    <h2 class="mb-4 text-base font-semibold">全站近 14 天点击趋势（UTC 日切）</h2>
-                    <StatBars :series="overview.daily" />
-                </div>
-                <div class="glass card">
-                    <h2 class="mb-4 text-base font-semibold">点击 Top 10</h2>
-                    <p v-if="overview.top_links.length === 0" class="text-sm text-ink-3">暂无点击数据</p>
-                    <ul v-else class="space-y-2 text-sm">
-                        <li
-                            v-for="(top, index) in overview.top_links"
-                            :key="top.code"
-                            class="flex items-center gap-2"
-                        >
-                            <span class="tnum w-5 shrink-0 text-ink-3">{{ index + 1 }}.</span>
-                            <a
-                                :href="shortUrlOf(top.code)"
-                                target="_blank"
-                                rel="noopener"
-                                class="truncate font-medium text-accent transition-colors hover:text-accent-hover"
-                                :title="top.url"
-                            >/{{ top.code }}</a>
-                            <span class="tnum ml-auto shrink-0 text-ink-2">{{ top.clicks }}</span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- 搜索与列表：数据密集区域使用不透明表面保证可读性 -->
-            <div class="surface-card card">
-                <form class="mb-5 flex flex-col gap-3 sm:flex-row" @submit.prevent="search">
-                    <input
-                        v-model="keyword"
-                        type="text"
-                        placeholder="搜索短码或目标链接…"
-                        aria-label="搜索短码或目标链接"
-                        class="input flex-1"
-                    />
-                    <div class="flex gap-3">
-                        <button type="submit" class="btn btn-primary flex-1 sm:flex-none">搜索</button>
-                        <button type="button" class="btn btn-secondary" @click="refresh">刷新</button>
+                    <div class="glass card">
+                        <div class="tnum text-3xl font-semibold">{{ overview.links }}</div>
+                        <div class="mt-1 text-sm text-ink-2">短链总数</div>
                     </div>
-                </form>
+                    <div class="glass card">
+                        <div class="tnum text-3xl font-semibold">{{ overview.total_clicks }}</div>
+                        <div class="mt-1 text-sm text-ink-2">累计点击</div>
+                    </div>
+                    <div class="glass card">
+                        <div class="tnum text-3xl font-semibold">{{ overview.clicks_today }}</div>
+                        <div class="mt-1 text-sm text-ink-2">今日点击</div>
+                    </div>
+                </div>
 
-                <div class="overflow-x-auto">
-                    <table class="w-full min-w-[720px] text-left text-sm">
-                        <thead>
-                            <tr class="border-b border-line text-xs uppercase tracking-wider text-ink-3">
-                                <th class="py-3 pr-3 font-medium">短链接</th>
-                                <th class="py-3 pr-3 font-medium">目标链接</th>
-                                <th class="py-3 pr-3 font-medium">创建时间</th>
-                                <th class="py-3 pr-3 text-right font-medium">今日</th>
-                                <th class="py-3 pr-3 text-right font-medium">总点击</th>
-                                <th class="py-3 text-right font-medium">操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-if="items.length === 0">
-                                <td colspan="6" class="py-12 text-center text-ink-3">
-                                    {{ loading ? '加载中…' : '没有匹配的短链' }}
-                                </td>
-                            </tr>
-                            <tr
-                                v-for="item in items"
-                                :key="item.code"
-                                class="row-hover border-b border-line align-middle last:border-0"
+                <!-- 全站趋势 + Top10 -->
+                <div v-if="overview" class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <div class="glass card lg:col-span-2">
+                        <h2 class="mb-4 text-base font-semibold">全站近 14 天点击趋势（UTC 日切）</h2>
+                        <StatBars :series="overview.daily" />
+                    </div>
+                    <div class="glass card">
+                        <h2 class="mb-4 text-base font-semibold">点击 Top 10</h2>
+                        <p v-if="overview.top_links.length === 0" class="text-sm text-ink-3">暂无点击数据</p>
+                        <ul v-else class="space-y-2 text-sm">
+                            <li
+                                v-for="(top, index) in overview.top_links"
+                                :key="top.code"
+                                class="flex items-center gap-2"
                             >
-                                <td class="py-3 pr-3">
-                                    <a
-                                        :href="shortUrlOf(item.code)"
-                                        target="_blank"
-                                        rel="noopener"
-                                        class="font-medium text-accent transition-colors hover:text-accent-hover"
-                                    >/{{ item.code }}</a>
-                                </td>
-                                <td class="max-w-[280px] py-3 pr-3">
-                                    <a
-                                        :href="item.url"
-                                        target="_blank"
-                                        rel="noopener"
-                                        class="block truncate text-ink-2 transition-colors hover:text-accent"
-                                        :title="item.url"
-                                    >{{ item.url }}</a>
-                                </td>
-                                <td class="tnum whitespace-nowrap py-3 pr-3 text-ink-3">{{ formatTime(item.created_at) }}</td>
-                                <td class="tnum py-3 pr-3 text-right text-ink-2">{{ item.clicks_today }}</td>
-                                <td class="tnum py-3 pr-3 text-right font-semibold">{{ item.clicks }}</td>
-                                <td class="whitespace-nowrap py-3 text-right">
-                                    <button type="button" class="action-btn" @click="openStats(item)">统计</button>
-                                    <button type="button" class="action-btn" @click="editing = item">编辑</button>
-                                    <button type="button" class="action-btn action-danger" @click="removeLink(item)">删除</button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- 分页 -->
-                <div class="mt-5 flex items-center justify-between text-sm">
-                    <span class="tnum text-ink-3">共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
-                    <div class="flex gap-2">
-                        <button
-                            type="button"
-                            class="btn btn-secondary btn-sm"
-                            :disabled="page <= 1"
-                            @click="goPage(page - 1)"
-                        >
-                            上一页
-                        </button>
-                        <button
-                            type="button"
-                            class="btn btn-secondary btn-sm"
-                            :disabled="page >= totalPages"
-                            @click="goPage(page + 1)"
-                        >
-                            下一页
-                        </button>
+                                <span class="tnum w-5 shrink-0 text-ink-3">{{ index + 1 }}.</span>
+                                <a
+                                    :href="shortUrlOf(top.code)"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="truncate font-medium text-accent transition-colors hover:text-accent-hover"
+                                    :title="top.url"
+                                >/{{ top.code }}</a>
+                                <span class="tnum ml-auto shrink-0 text-ink-2">{{ top.clicks }}</span>
+                            </li>
+                        </ul>
                     </div>
                 </div>
+
+                <!-- 搜索与列表：数据密集区域使用不透明表面保证可读性 -->
+                <div class="surface-card card">
+                    <form class="mb-5 flex flex-col gap-3 sm:flex-row" @submit.prevent="search">
+                        <input
+                            v-model="keyword"
+                            type="text"
+                            placeholder="搜索短码或目标链接…"
+                            aria-label="搜索短码或目标链接"
+                            class="input flex-1"
+                        />
+                        <div class="flex gap-3">
+                            <button type="submit" class="btn btn-primary flex-1 sm:flex-none">搜索</button>
+                            <button type="button" class="btn btn-secondary" @click="refresh">刷新</button>
+                        </div>
+                    </form>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full min-w-[720px] text-left text-sm">
+                            <thead>
+                                <tr class="border-b border-line text-xs uppercase tracking-wider text-ink-3">
+                                    <th class="py-3 pr-3 font-medium">短链接</th>
+                                    <th class="py-3 pr-3 font-medium">目标链接</th>
+                                    <th class="py-3 pr-3 font-medium">创建时间</th>
+                                    <th class="py-3 pr-3 text-right font-medium">今日</th>
+                                    <th class="py-3 pr-3 text-right font-medium">总点击</th>
+                                    <th class="py-3 text-right font-medium">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-if="items.length === 0">
+                                    <td colspan="6" class="py-12 text-center text-ink-3">
+                                        {{ loading ? '加载中…' : '没有匹配的短链' }}
+                                    </td>
+                                </tr>
+                                <tr
+                                    v-for="item in items"
+                                    :key="item.code"
+                                    class="row-hover border-b border-line align-middle last:border-0"
+                                >
+                                    <td class="py-3 pr-3">
+                                        <a
+                                            :href="shortUrlOf(item.code)"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="font-medium text-accent transition-colors hover:text-accent-hover"
+                                        >/{{ item.code }}</a>
+                                    </td>
+                                    <td class="max-w-[280px] py-3 pr-3">
+                                        <a
+                                            :href="item.url"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="block truncate text-ink-2 transition-colors hover:text-accent"
+                                            :title="item.url"
+                                        >{{ item.url }}</a>
+                                    </td>
+                                    <td class="tnum whitespace-nowrap py-3 pr-3 text-ink-3">{{ formatTime(item.created_at) }}</td>
+                                    <td class="tnum py-3 pr-3 text-right text-ink-2">{{ item.clicks_today }}</td>
+                                    <td class="tnum py-3 pr-3 text-right font-semibold">{{ item.clicks }}</td>
+                                    <td class="whitespace-nowrap py-3 text-right">
+                                        <button type="button" class="action-btn" @click="openStats(item)">统计</button>
+                                        <button type="button" class="action-btn" @click="editing = item">编辑</button>
+                                        <button type="button" class="action-btn action-danger" @click="removeLink(item)">删除</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 分页 -->
+                    <div class="mt-5 flex items-center justify-between text-sm">
+                        <span class="tnum text-ink-3">共 {{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                class="btn btn-secondary btn-sm"
+                                :disabled="page <= 1"
+                                @click="goPage(page - 1)"
+                            >
+                                上一页
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-secondary btn-sm"
+                                :disabled="page >= totalPages"
+                                @click="goPage(page + 1)"
+                            >
+                                下一页
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                </div>
-            </transition>
+            </div>
 
             <!-- 弹窗 -->
             <transition name="modal">

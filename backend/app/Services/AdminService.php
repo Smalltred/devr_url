@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Cache\Store;
 use App\Exceptions\ConflictException;
 use App\Exceptions\ShortCodeNotFoundException;
 use App\Exceptions\ValidationException;
@@ -12,7 +13,7 @@ use App\Repositories\UrlRepository;
 use App\Validation\UrlValidator;
 
 /**
- * 管理端业务编排：概览统计、短链分页/搜索、编辑、删除、单链统计、站点设置。
+ * 管理端业务编排：概览统计、短链分页/搜索、编辑、删除、单链统计、站点设置与缓存状态。
  * 每日序列与全站统计的时间口径统一为 UTC，缺失日期在内存中补零。
  */
 final class AdminService
@@ -34,6 +35,7 @@ final class AdminService
         private readonly ClickRepository $clicks,
         private readonly UrlValidator $validator,
         private readonly SettingsService $settings,
+        private readonly Store $cache,
     ) {
     }
 
@@ -50,6 +52,26 @@ final class AdminService
             'require_login' => $this->settings->requireLogin(),
             // env = 沿用环境变量配置（含默认密码）；custom = 已在后台修改过
             'password_source' => $this->settings->hasCustomPassword() ? 'custom' : 'env',
+            'cache_ttl' => $this->settings->cacheTtl(),
+            'cache_negative_ttl' => $this->settings->cacheNegativeTtl(),
+            'cache' => $this->cacheStatus(),
+        ];
+    }
+
+    /**
+     * 缓存状态视图：驱动、可用性、服务端地址与命中统计（供设置页展示）。
+     *
+     * @return array<string, mixed>
+     */
+    private function cacheStatus(): array
+    {
+        $status = $this->cache->status();
+
+        return [
+            'driver' => $status['driver'],
+            'available' => $status['available'],
+            'servers' => $status['servers'],
+            'stats' => $this->cache->stats(),
         ];
     }
 
@@ -79,6 +101,22 @@ final class AdminService
 
         if (array_key_exists('require_login', $body)) {
             $values[SettingsService::KEY_REQUIRE_LOGIN] = $this->normalizeBool($body['require_login']) ? '1' : '0';
+        }
+
+        if (array_key_exists('cache_ttl', $body)) {
+            $ttl = filter_var($body['cache_ttl'], FILTER_VALIDATE_INT);
+            if ($ttl === false || $ttl < 0 || $ttl > 86400) {
+                throw new ValidationException('缓存有效期需为 0-86400 秒的整数（0 = 不缓存）');
+            }
+            $values[SettingsService::KEY_CACHE_TTL] = (string) $ttl;
+        }
+
+        if (array_key_exists('cache_negative_ttl', $body)) {
+            $ttl = filter_var($body['cache_negative_ttl'], FILTER_VALIDATE_INT);
+            if ($ttl === false || $ttl < 0 || $ttl > 3600) {
+                throw new ValidationException('负缓存有效期需为 0-3600 秒的整数（0 = 不缓存不存在短码）');
+            }
+            $values[SettingsService::KEY_CACHE_NEGATIVE_TTL] = (string) $ttl;
         }
 
         // 校验合并后的有效组合：随机短码要求长度达标（本次未提交的键取当前已存值）

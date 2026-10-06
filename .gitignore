@@ -39,4 +39,4 @@ yarn-error.log*
 # ZCode local workspace
 /.zcode/
 /.zcodeignore
-deploy/.package-manifest.json
+deploy/.deployed-manifest.json

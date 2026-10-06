@@ -57,6 +57,7 @@ const submit = async () => {
             <p v-if="error" class="mb-4 text-sm text-danger">{{ error }}</p>
 
             <button type="submit" :disabled="submitting" class="btn btn-primary w-full">
+                <span v-if="submitting" class="spinner" aria-hidden="true"></span>
                 {{ submitting ? '登录中…' : '登 录' }}
             </button>
 

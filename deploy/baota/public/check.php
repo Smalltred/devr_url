@@ -3,18 +3,16 @@
 declare(strict_types=1);
 
 /**
- * 宝塔部署包 · 环境自检（public/check.php，访问 /check.php?token=xxxx）
+ * 宝塔部署包 · 环境自检（public/check.php，直接访问 /check.php）
  *
- * 安全检查（防止把部署细节暴露给公网）：
- *   - 必须携带访问令牌：令牌由打包脚本随机生成，存放于包根 .check-token（Web 根之外），
- *     通过 hash_equals 常量时间比较；未生成令牌文件时本页直接拒绝运行；
+ * 安全边界：
  *   - 页面不显示任何文件路径、数据库路径或配置值，只显示通过/失败与修复提示；
- *   - 全链路实测与数据写入必须显式带 run=1，且写入的探针短链在本次请求内清理干净。
+ *   - 全链路实测会写入一条探针短链，并在本次请求内清理干净，不残留数据。
  *
  * 检查内容：
  *   A. 服务器端：PHP 版本、扩展（pdo_sqlite/mbstring/json）、storage 可写、数据库可打开；
  *   B. 路由转发（伪静态）：POST /url 是否能到达 PHP（用非法参数探测，不写数据）；
- *   C. 后端全链路内部实测（仅 run=1）：创建短链 → 跳转 → 清理。
+ *   C. 后端全链路内部实测：创建短链 → 跳转 → 清理。
  *
  * 排障完成后请删除本文件。
  */
@@ -23,24 +21,6 @@ error_reporting(E_ALL);
 ini_set('display_errors', '0');
 
 $baseDir = dirname(__DIR__);
-$tokenFile = $baseDir.'/.check-token';
-
-// ---------- 0. 访问令牌校验 ----------
-$expected = is_file($tokenFile) ? trim((string) file_get_contents($tokenFile)) : '';
-$provided = isset($_GET['token']) && is_string($_GET['token']) ? trim($_GET['token']) : '';
-
-if ($expected === '' || $provided === '' || !hash_equals($expected, $provided)) {
-    http_response_code(403);
-    header('Content-Type: text/plain; charset=utf-8');
-    echo "Forbidden\n\n";
-    echo "本页需要在 URL 上携带访问令牌：/check.php?token=<令牌>\n";
-    echo $expected === ''
-        ? "令牌文件 .check-token 不存在：请重新执行 php deploy/build-baota-package.php 生成部署包。\n"
-        : "令牌已生成，见部署包根目录 .check-token（或运行部署脚本后的输出）。\n";
-    exit;
-}
-
-$runFullChain = isset($_GET['run']) && $_GET['run'] === '1';
 
 $checks = [];
 
@@ -104,10 +84,10 @@ if ($autoloadOk && $envOk && $storageOk) {
 }
 $add('SQLite 数据库', $dbMessage, $dbOk, '确认 .env 的 DATABASE_PATH 指向可写目录，且 storage/ 权限正确');
 
-// ---------- C. 后端全链路内部实测（仅 run=1，且写入后立即清理） ----------
-$internalMessage = $runFullChain ? '未检测（前置检查未通过）' : '未执行（加 &run=1 可运行，会写入并清理一条探针短链）';
+// ---------- C. 后端全链路内部实测（写入探针短链并在本次请求内清理） ----------
+$internalMessage = '未检测（前置检查未通过）';
 $internalOk = false;
-if ($runFullChain && $autoloadOk && $envOk) {
+if ($autoloadOk && $envOk) {
     try {
         require $baseDir.'/vendor/autoload.php';
         App\Support\Env::load($baseDir.'/.env');
@@ -170,7 +150,7 @@ if ($runFullChain && $autoloadOk && $envOk) {
 </head>
 <body>
 <h1>short-url 环境自检</h1>
-<p class="hint">本页含部署环境信息，已启用令牌访问。排障完成后请删除 <code>public/check.php</code>，并撤销令牌文件。</p>
+<p class="hint">排障完成后请删除本文件（<code>public/check.php</code>）。</p>
 
 <h2>A. 服务器环境</h2>
 <table>

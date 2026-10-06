@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
+use App\Cache\Store;
 use App\Foundation\App;
 use App\Http\Request;
 use App\Repositories\ApiKeyRepository;
@@ -14,6 +15,7 @@ use App\Repositories\SettingsRepository;
 use App\Support\Config;
 use Tests\Doubles\InMemoryApiKeyRepository;
 use Tests\Doubles\InMemoryAuthRepository;
+use Tests\Doubles\InMemoryCacheStore;
 use Tests\Doubles\InMemoryClickRepository;
 use Tests\Doubles\InMemoryRequestThrottleRepository;
 use Tests\Doubles\InMemorySettingsRepository;
@@ -35,6 +37,7 @@ final class TestApp
         ?ApiKeyRepository $apiKeys = null,
         ?RequestThrottleRepository $throttles = null,
         ?Config $config = null,
+        ?Store $cache = null,
     ): App {
         return App::create(
             $config ?? self::defaultConfig(),
@@ -45,6 +48,7 @@ final class TestApp
             $settings ?? new InMemorySettingsRepository(),
             $apiKeys ?? new InMemoryApiKeyRepository(),
             $throttles ?? new InMemoryRequestThrottleRepository(),
+            $cache ?? new InMemoryCacheStore(),
         );
     }
 

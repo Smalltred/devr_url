@@ -11,9 +11,14 @@ declare(strict_types=1);
  *   ├── storage/         SQLite 数据库与日志
  *   ├── .env / .env.example
  *   ├── nginx-rewrite.conf
+ *   ├── update/          增量更新：相对"已部署基线"需要覆盖到服务器的文件 + 更新说明.txt
  *   └── 部署说明.md
  *
- * 用法：php deploy/build-baota-package.php
+ * 用法：
+ *   php deploy/build-baota-package.php                     生成/刷新部署包与 update/ 增量
+ *   php deploy/build-baota-package.php --mark-deployed     上传完成后执行：把基线推进到当前包，
+ *                                                          之后的 update/ 只包含真正的增量
+ *
  * 前置：先在项目根目录执行 npm run build 生成 dist/。
  * 后端依赖：设置环境变量 COMPOSER_PHAR 指向 composer.phar 时以 --no-dev 重新安装（包更小）；
  *          未设置则直接复制现有 vendor/（含开发工具，体积较大但离线可用）。
@@ -24,25 +29,41 @@ $distDir = $projectRoot.'/dist';
 $backendDir = $projectRoot.'/backend';
 $packageDir = $projectRoot.'/baota-package';
 $templateDir = __DIR__.'/baota';
+$deployedManifestFile = $projectRoot.'/deploy/.deployed-manifest.json';
+
+// ---------- 0) --mark-deployed：把部署基线推进到当前包（表示服务器已更新到此版本） ----------
+if (in_array('--mark-deployed', $argv ?? [], true)) {
+    if (!is_dir($packageDir) || !is_file($packageDir.'/public/index.php')) {
+        fwrite(STDERR, "未找到部署包，请先不带参数运行一次 php deploy/build-baota-package.php\n");
+        exit(1);
+    }
+
+    file_put_contents($deployedManifestFile, (string) json_encode(build_manifest($packageDir), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    $updateDir = $packageDir.'/update';
+    remove_directory($updateDir);
+    if (mkdir($updateDir, 0777, true)) {
+        file_put_contents($updateDir.'/更新说明.txt', "基线已对齐当前版本（".date('Y-m-d H:i')."）。\n"
+            ."服务器已更新到此包。下次项目更新后再生成部署包，update/ 将只包含需要替换的增量文件。\n");
+    }
+
+    echo "部署基线已对齐当前包。之后 update/ 只包含相对此版本的增量。\n";
+    exit(0);
+}
 
 if (!is_file($distDir.'/index.html')) {
     fwrite(STDERR, "缺少 dist/index.html，请先在项目根目录执行 npm run build\n");
     exit(1);
 }
 
-// ---------- 0) 增量基线：必须在重建前采集（上次清单 > 磁盘旧包） ----------
-$manifestFile = $projectRoot.'/deploy/.package-manifest.json';
+// ---------- 0.1) 增量基线：服务器已部署版本的清单（永不自动推进） ----------
 $previous = null;
-$baseline = '首次生成（无基线）';
-if (is_file($manifestFile)) {
-    $decoded = json_decode((string) file_get_contents($manifestFile), true);
+$baseline = '未标记（无法确定服务器当前版本，本次 update/ 为全量文件）';
+if (is_file($deployedManifestFile)) {
+    $decoded = json_decode((string) file_get_contents($deployedManifestFile), true);
     if (is_array($decoded)) {
         $previous = $decoded;
-        $baseline = '上次生成的清单';
+        $baseline = '上次标记部署的版本（--mark-deployed）';
     }
-} elseif (is_dir($packageDir)) {
-    $previous = build_manifest($packageDir);
-    $baseline = '磁盘上的旧包';
 }
 
 // ---------- 1) 重建包目录 ----------
@@ -99,10 +120,6 @@ foreach (['nginx-rewrite.conf', '部署说明.md'] as $name) {
     copy($templateDir.'/'.$name, $packageDir.'/'.$name);
 }
 
-// check.php 自检页需要访问令牌（Web 根之外存放，避免被公网扫到部署细节）
-$checkToken = bin2hex(random_bytes(16));
-file_put_contents($packageDir.'/.check-token', $checkToken."\n");
-
 // ---------- 7) 直接初始化数据库（建全全部表结构，首个请求即可写入） ----------
 require $packageDir.'/vendor/autoload.php';
 App\Support\Env::load($packageDir.'/.env');
@@ -114,7 +131,7 @@ $database->execute(static function (PDO $pdo): void {
 unset($database);
 echo "数据库已初始化\n";
 
-// ---------- 8) 增量更新文件夹（update/：相对基线需要替换的文件） ----------
+// ---------- 8) 增量更新文件夹（update/：相对"已部署基线"需要替换的文件） ----------
 $current = build_manifest($packageDir);
 
 $updateDir = $packageDir.'/update';
@@ -126,10 +143,12 @@ if (!mkdir($updateDir, 0777, true)) {
 
 $added = $modified = [];
 if ($previous === null) {
-    // 首次生成：update/ 等同全量（不含 storage 数据与日志）
+    // 无部署基线：全量（排除数据库、日志与 .env，避免覆盖服务器数据与配置）
     $added = array_keys($current);
     $deleted = [];
-    $note = '首次生成基线：update/ 内为完整包内容（等同全量部署，已排除数据库与日志）。';
+    $note = '尚未标记部署基线（无法确定服务器当前版本），update/ 内为全量文件。'
+        ."\n覆盖到服务器后，请执行 php deploy/build-baota-package.php --mark-deployed 对齐基线，"
+        ."之后 update/ 将只包含真正的增量。";
 } else {
     foreach ($current as $relPath => $hash) {
         if (!array_key_exists($relPath, $previous)) {
@@ -140,8 +159,8 @@ if ($previous === null) {
     }
     $deleted = array_keys(array_diff_key($previous, $current));
     $note = count($added) === 0 && count($modified) === 0 && count($deleted) === 0
-        ? '与基线完全一致，无需上传任何文件。'
-        : '把 update/ 内的文件按相同相对路径覆盖到服务器站点目录即可（不含数据库，服务器数据不受影响）。';
+        ? '服务器已与此版本一致，无需上传任何文件。'
+        : '把 update/ 内的文件按相同相对路径覆盖到服务器站点目录即可（不含数据库与 .env，服务器数据与配置不受影响）。';
 }
 
 foreach (array_merge($added, $modified) as $relPath) {
@@ -169,21 +188,17 @@ foreach ($deleted as $relPath) {
     $instruction .= "  [-] $relPath\n";
 }
 $instruction .= "\n注意：\n"
-    ."  1. update/ 不会包含 storage/short-url.sqlite3（服务器数据请勿被包内空库覆盖）；\n"
-    ."  2. 若服务器版本落后多个版本，建议改为整包重传一次以对齐基线；\n"
-    ."  3. 上传完成后可访问 /check.php?token=<令牌> 验证（令牌见包根 .check-token）；\n"
-    ."  4. 排障完成后请删除服务器上的 public/check.php 与 .check-token。\n";
+    ."  1. update/ 不会包含 storage/short-url.sqlite3 与 .env（服务器数据与配置请勿被包内空库/默认值覆盖）；\n"
+    ."  2. 上传完成后执行 php deploy/build-baota-package.php --mark-deployed 对齐基线；\n"
+    ."  3. 上传完成后可访问 /check.php 验证；排障完成后请删除服务器上的 public/check.php。\n";
 file_put_contents($updateDir.'/更新说明.txt', $instruction);
-
-file_put_contents($manifestFile, (string) json_encode($current, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
 $changeCount = count(array_merge($added, $modified));
 echo "增量更新：$changeCount 个文件需要替换（见 baota-package/update/）\n";
-echo "自检页令牌（.check-token，用于 /check.php?token=...）：$checkToken\n";
 echo "部署包已生成：$packageDir\n";
 
 /**
- * 计算包内文件清单（相对路径 => md5），排除数据库、日志与 update 自身。
+ * 计算包内文件清单（相对路径 => md5），排除数据库、日志、.env 与 update 自身。
  *
  * @return array<string, string>
  */
@@ -204,6 +219,7 @@ function build_manifest(string $dir): array
             str_starts_with($relPath, 'storage/short-url.sqlite3')
             || str_starts_with($relPath, 'storage/logs/')
             || str_starts_with($relPath, 'update/')
+            || $relPath === '.env'
         ) {
             continue;
         }

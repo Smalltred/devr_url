@@ -49,6 +49,14 @@ final class SettingsFeatureTest extends TestCase
             'code_random' => false,
             'require_login' => false,
             'password_source' => 'env',
+            'cache_ttl' => 300,
+            'cache_negative_ttl' => 30,
+            'cache' => [
+                'driver' => 'memcached',
+                'available' => true,
+                'servers' => ['127.0.0.1:11211'],
+                'stats' => ['hits' => 0, 'misses' => 0, 'items' => 0],
+            ],
         ], $view);
 
         // 默认设置下首个短码与历史行为逐位一致

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Foundation;
 
+use App\Cache\Store;
+use App\Cache\StoreFactory;
 use App\Controllers\AdminController;
 use App\Controllers\AuthController;
 use App\Controllers\OpenApiController;
@@ -16,6 +18,7 @@ use App\Http\Response;
 use App\Http\Router;
 use App\Repositories\ApiKeyRepository;
 use App\Repositories\AuthRepository;
+use App\Repositories\CachedUrlRepository;
 use App\Repositories\ClickRepository;
 use App\Repositories\RequestThrottleRepository;
 use App\Repositories\SettingsRepository;
@@ -74,6 +77,7 @@ final class App
         ?SettingsRepository $settingsRepository = null,
         ?ApiKeyRepository $apiKeyRepository = null,
         ?RequestThrottleRepository $throttleRepository = null,
+        ?Store $cacheStore = null,
     ): self {
         $logger ??= new Logger((string) $config->get('logging.path', sys_get_temp_dir().'/short-url-logs'));
         $database = new DatabaseService($config);
@@ -84,7 +88,20 @@ final class App
         $settingsRepository ??= new SqliteSettingsRepository($database);
         $apiKeyRepository ??= new SqliteApiKeyRepository($database);
         $throttleRepository ??= new SqliteRequestThrottleRepository($database);
-        $settings = new SettingsService($settingsRepository);
+
+        $settings = new SettingsService(
+            $settingsRepository,
+            max(0, (int) $config->get('cache.ttl', 300)),
+            max(0, (int) $config->get('cache.negative_ttl', 30)),
+        );
+
+        // 缓存装饰器：跳转解析走缓存，写操作主动失效；
+        // 传入的仓库若已是缓存装饰器（测试注入）则不重复包装
+        $cacheStore ??= StoreFactory::create($config, $logger);
+        $cachedRepository = $repository instanceof CachedUrlRepository
+            ? $repository
+            : new CachedUrlRepository($repository, $cacheStore, $settings);
+
         $apiKeyService = new ApiKeyService($apiKeyRepository, $logger);
 
         $validator = new UrlValidator();
@@ -93,7 +110,7 @@ final class App
             (string) $config->get('security.ip_hash_secret', ''),
         );
 
-        $shortUrlService = new ShortUrlService($repository, new ShortCodeService(), $validator, $settings);
+        $shortUrlService = new ShortUrlService($cachedRepository, new ShortCodeService(), $validator, $settings);
         $urlController = new UrlController(
             $shortUrlService,
             new ClickTracker($clickRepository, $ipHasher, $config->get('privacy.store_full_referer') === true),
@@ -103,7 +120,7 @@ final class App
         $authService = new AuthService($authRepository, $config, $logger, $ipHasher, $settings);
         $authController = new AuthController($authService, $settings);
 
-        $adminService = new AdminService($repository, $clickRepository, $validator, $settings);
+        $adminService = new AdminService($cachedRepository, $clickRepository, $validator, $settings, $cacheStore);
         $adminController = new AdminController(
             $adminService,
             $authService,

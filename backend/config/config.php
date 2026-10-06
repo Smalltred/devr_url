@@ -61,6 +61,19 @@ return [
         // SQLite 数据库文件；目录不存在时自动创建，文件随请求惰性打开
         'path' => env('DATABASE_PATH', $backendPath.'/storage/short-url.sqlite3'),
     ],
+    'cache' => [
+        // 短链跳转缓存：Memcached。扩展未装或服务不可用时自动降级为直连数据库（跳转不受影响）；
+        // 设为 none 可显式关闭。
+        'driver' => env('CACHE_DRIVER', 'memcached'),
+        // 服务地址（逗号分隔 host:port），默认本机 memcached
+        'servers' => env_list('MEMCACHED_SERVERS') ?: ['127.0.0.1:11211'],
+        // 命中缓存有效期（秒），后台「设置」页可覆盖；0 = 不缓存
+        'ttl' => env_int('CACHE_TTL', 300),
+        // 负缓存：缓存“短码不存在”的时长（秒），抵御公网扫描流量；0 = 关闭
+        'negative_ttl' => env_int('CACHE_NEGATIVE_TTL', 30),
+        // 连接/读写超时（毫秒）：宁可穿透数据库，也不让缓存拖慢跳转
+        'timeout_ms' => env_int('MEMCACHED_TIMEOUT_MS', 200),
+    ],
     'auth' => [
         // 单管理员账号；生产务必修改默认密码或改用密码哈希
         // 哈希生成：php -r "echo password_hash('你的密码', PASSWORD_DEFAULT);"

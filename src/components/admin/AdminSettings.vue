@@ -13,6 +13,11 @@ const passwordSource = ref('env')
 const settingsError = ref('')
 const savingSettings = ref(false)
 
+// 缓存
+const cacheTtl = ref(300)
+const cacheNegativeTtl = ref(30)
+const cacheStatus = ref(null)
+
 // 修改密码
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -41,6 +46,9 @@ function applySettings(data) {
     codeRandom.value = Boolean(data.code_random)
     requireLogin.value = Boolean(data.require_login)
     passwordSource.value = data.password_source || 'env'
+    cacheTtl.value = data.cache_ttl ?? 300
+    cacheNegativeTtl.value = data.cache_negative_ttl ?? 30
+    cacheStatus.value = data.cache || null
 }
 
 async function loadKeys() {
@@ -63,6 +71,8 @@ async function saveSettings() {
                 code_min_length: Number(codeMinLength.value),
                 code_random: codeRandom.value,
                 require_login: requireLogin.value,
+                cache_ttl: Number(cacheTtl.value),
+                cache_negative_ttl: Number(cacheNegativeTtl.value),
             }),
         )
         emit('notice', '设置已保存')
@@ -219,6 +229,60 @@ function formatTime(value) {
                         aria-label="创建短链需要登录"
                         @click="requireLogin = !requireLogin"
                     ></button>
+                </div>
+
+                <div class="mb-4 border-t border-line pt-5">
+                    <div class="mb-3 flex items-start justify-between gap-4">
+                        <div>
+                            <div class="text-sm font-medium">短链缓存（Memcached）</div>
+                            <p class="mt-1 text-xs text-ink-3">
+                                跳转结果缓存，命中时免查数据库；缓存不可用时自动降级为直连数据库，不影响跳转
+                            </p>
+                        </div>
+                        <span
+                            v-if="cacheStatus"
+                            class="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
+                            :class="cacheStatus.available ? 'bg-[var(--color-success-soft)] text-success' : 'bg-[var(--color-danger-soft)] text-danger'"
+                        >
+                            {{ cacheStatus.available ? '运行中' : '不可用（已降级）' }}
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-ink-2" for="cache-ttl">缓存有效期（秒）</label>
+                            <input
+                                id="cache-ttl"
+                                v-model.number="cacheTtl"
+                                type="number"
+                                min="0"
+                                max="86400"
+                                class="input w-full"
+                            />
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-ink-2" for="cache-negative-ttl">负缓存（秒）</label>
+                            <input
+                                id="cache-negative-ttl"
+                                v-model.number="cacheNegativeTtl"
+                                type="number"
+                                min="0"
+                                max="3600"
+                                class="input w-full"
+                            />
+                        </div>
+                    </div>
+                    <p class="mt-2 text-xs text-ink-3">
+                        缓存有效期 0 = 不缓存；负缓存用于缓存“短码不存在”，抵御扫描流量，0 = 关闭。
+                    </p>
+
+                    <p v-if="cacheStatus" class="mt-3 text-xs text-ink-3">
+                        服务节点：{{ cacheStatus.servers.join('、') || '—' }}
+                        <template v-if="cacheStatus.available">
+                            · 累计命中 {{ cacheStatus.stats.hits }} / 未命中 {{ cacheStatus.stats.misses }} · 缓存条目
+                            {{ cacheStatus.stats.items }}
+                        </template>
+                    </p>
                 </div>
 
                 <p v-if="settingsError" class="mb-4 text-sm text-danger">{{ settingsError }}</p>
