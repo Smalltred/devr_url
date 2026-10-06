@@ -51,9 +51,14 @@
 | `src/store.js` + `src/reducers/{entityReducer,errorReducer}.js`（Redux Toolkit） | `src/stores/shortUrl.js`（Pinia） |
 | `src/services/entity.js`（`REACT_APP_API_BASE_URL`） | 同名文件，改读 `VITE_API_BASE_URL`，并扩展管理端 API 封装 |
 | `react-scripts`（webpack，dev 3000 + proxy） | Vite 6（dev 3000，`/url`、`/api` 代理到 3001） |
+| （无对应物，本版新增） | `src/components/ThemeToggle.vue` 亮/暗主题切换 |
 | `qrcode` / `copy-to-clipboard` / `file-saver` / `axios` | 原样保留，功能不变 |
 
-二维码仍在浏览器端生成，服务端不参与；页面视觉与交互与原版保持一致。
+二维码仍在浏览器端生成，服务端不参与。视觉在本版升级为设计令牌体系：
+`index.css` 以 CSS 变量定义亮/暗两套调色板与玻璃拟态表面（`data-theme` 切换），
+`tailwind.config.js` 将令牌映射为 Tailwind 工具类（`text-ink` / `text-accent` / `border-line` 等）；
+主题经页头按钮切换、localStorage（`devr-theme`）持久化，未设置时跟随系统
+`prefers-color-scheme`，`index.html` 内的首帧脚本保证深色模式无白屏闪烁。
 
 ## 4. 行为差异（相对原 Node 版，逐项声明）
 

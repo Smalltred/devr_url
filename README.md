@@ -16,6 +16,7 @@
 
 - **短链生成**：62 进制乱序编码短码，支持批量复制、逐条复制、下载二维码（前端生成）；
 - **永久跳转**：短码 302 跳转到原链接，数据存 SQLite 单文件，不依赖外部服务；
+- **亮/暗双主题**：默认跟随系统偏好，可在页头手动切换并记忆（localStorage 持久化，首帧应用主题无白屏闪烁）；
 - **管理后台**（`/admin`）：单管理员登录、全站概览与近 14 天趋势、点击 Top 10、单链统计
   （独立访客 / 来源域名 / 设备分布）、短链编辑与删除、运行时设置、后台改密；
 - **点击统计**：跳转时自动记录点击（UTC 日切分、来源域名、设备类型、IP 匿名哈希估算独立访客），
@@ -160,6 +161,9 @@ php deploy/build-baota-package.php    # 生成 baota-package/ 目录（已 gitig
 | ADMIN_TOKEN_TTL_DAYS | 7 | 登录态有效期（天） |
 | DIST_INDEX | dist/index.html | `/admin` 返回的 SPA 入口；部署包布局下为 public/index.html |
 | VITE_API_BASE_URL | 空 | 前端 API 地址，构建时读取，留空为同源 |
+
+> 前端主题（亮/暗）不依赖环境变量：由页头按钮切换，存于浏览器 localStorage（`devr-theme`），
+> 未设置时跟随系统 `prefers-color-scheme`。
 
 ## 目录结构
 
