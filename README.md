@@ -21,9 +21,11 @@
 - **亮/暗双主题**：默认跟随系统偏好，可在页头手动切换并记忆（localStorage 持久化，首帧应用主题无白屏闪烁）；
 - **管理后台**（`/admin`）：单管理员登录、全站概览与近 14 天趋势、点击 Top 10、单链统计
   （独立访客 / 来源域名 / 设备分布）、短链编辑与删除、运行时设置、后台改密；
+- **开放 API**：在后台「设置」页创建 API Key 后，外部程序可经 `POST /api/open/shorten`
+  程序化创建短链（Bearer / X-API-Key 鉴权，明文 Key 仅创建时展示一次）；
 - **点击统计**：跳转时自动记录点击（UTC 日切分、来源域名、设备类型、IP 匿名哈希估算独立访客），
   原始 IP 与 User-Agent 不入库；
-- **隐私与安全**：登录态 HttpOnly Cookie、登录失败限流（15 分钟 5 次）、密码仅存哈希。
+- **隐私与安全**：登录态 HttpOnly Cookie、登录失败限流（15 分钟 5 次）、密码与 API Key 仅存哈希。
 
 ## 架构
 
@@ -83,6 +85,8 @@ npm run dev
 - **创建短链需要登录**：开启后首页仅管理员可生成短链，未登录访问首页将跳转登录页；
 - **修改密码**：校验当前密码后更新（新密码至少 8 位），哈希优先于环境变量配置，并**撤销全部登录态**（所有端强制重新登录）。
 
+「设置」页同时提供 **API Key 管理**（创建 / 重置 / 删除），供开放 API 程序化调用，见下文「开放 API」。
+
 关闭后台自定义密码（恢复环境变量密码）目前需清空数据库 `settings` 表的 `admin_password_hash` 键。
 
 ```bash
@@ -95,6 +99,25 @@ php -r "echo password_hash('你的密码', PASSWORD_DEFAULT);"
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD_HASH=$2y$10$...
 ```
+
+### 开放 API
+
+在「设置」页创建 API Key 后，外部程序即可程序化创建短链（不受「创建需登录」门控影响）：
+
+- Key 格式 `devr_` + 32 位十六进制；**明文仅在创建/重置时展示一次**，服务端只保存 sha256 哈希；
+- 支持重置（旧 Key 立即失效、名称保留）与删除；列表展示 Key 前缀与最近使用时间；
+- 鉴权方式：`Authorization: Bearer <key>` 或 `X-API-Key: <key>` 请求头。
+
+```bash
+# 调用开放 API（先在管理后台「设置」页创建 Key）：
+curl -s -X POST https://your-domain/api/open/shorten \
+    -H 'Authorization: Bearer devr_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' \
+    -H 'Content-Type: application/json' \
+    -d '{"url": "https://github.com"}'
+# => {"url":"https://github.com","code":"GGGS"}
+```
+
+接口细节见 [docs/API.md](docs/API.md)「开放 API」章节。
 
 ## 质量工具（backend/ 目录内执行）
 

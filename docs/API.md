@@ -80,8 +80,8 @@ HTTP/1.1 404 Not Found
 | 200 | 创建成功 / 管理接口成功 |
 | 302 | 短链跳转 |
 | 400 | 请求参数错误（URL 非法 / 缺字段 / 非法 JSON / 短码不合法） |
-| 401 | 未登录或登录态失效（管理接口）；用户名或密码错误 |
-| 404 | 短码不存在 |
+| 401 | 未登录或登录态失效（管理接口）；用户名或密码错误；API Key 缺失或无效（开放接口） |
+| 404 | 短码不存在；API Key 不存在（重置/删除） |
 | 405 | HTTP 方法不允许（带 Allow 头） |
 | 409 | 新短码已被占用 |
 | 429 | 登录失败次数过多被限流（15 分钟窗口内失败 5 次） |
@@ -296,3 +296,70 @@ Content-Type: application/json
 `GET /{code}` 跳转成功时自动记录一条点击（时间 UTC、来源域名、设备 mobile/desktop、
 IP 匿名哈希 sha256(ip+盐) 前 24 位用于独立访客估算）。HEAD 请求不计数；采集失败不影响跳转。
 原始 IP 与 User-Agent 不入库。
+
+## 开放 API
+
+供外部程序程序化创建短链。鉴权使用管理后台「设置」页创建的 API Key，
+`Authorization: Bearer <key>` 或 `X-API-Key: <key>` 请求头二选一；
+缺失或无效返回 `401 {"error":"Invalid API Key"}`。**不受「创建短链需要登录」门控影响**。
+
+Key 安全模型：明文仅在创建/重置响应中出现一次，服务端只存 sha256 哈希；
+列表只暴露前缀；重置后旧 Key 立即失效。
+
+### 创建短链
+
+```http
+POST /api/open/shorten
+Authorization: Bearer devr_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Content-Type: application/json
+
+{"url": "https://example.com"}
+```
+
+- 成功（200）：`{"url": "...", "code": "..."}`，与公开创建接口一致，短码遵循后台长度/随机性设置；
+- URL 非法（400）：`{"error": "Incorrect URL format"}`；
+- Key 无效（401）：`{"error": "Invalid API Key"}`。
+
+每次成功调用会更新 Key 的最近使用时间（UTC）。
+
+## 管理端：API Key 管理
+
+以下接口需管理员登录。
+
+```http
+GET /api/admin/keys
+```
+
+```json
+{
+    "items": [{
+        "id": 1,
+        "name": "ci",
+        "prefix": "devr_ab12cd3",
+        "created_at": "2026-10-06 08:00:00",
+        "last_used_at": "2026-10-06 09:30:00"
+    }]
+}
+```
+
+```http
+POST /api/admin/keys
+Content-Type: application/json
+
+{"name": "ci"}
+```
+
+成功（200）：`{"id": 1, "name": "ci", "prefix": "devr_ab12cd3", "key": "devr_xxx..."}` —— **`key` 仅此一次返回**。
+名称需为 1-64 个字符，否则 400。
+
+```http
+POST /api/admin/keys/{id}/reset
+```
+
+重置为新的明文 Key（响应结构同创建），旧 Key 立即失效，名称与创建时间不变；Key 不存在返回 404。
+
+```http
+DELETE /api/admin/keys/{id}
+```
+
+删除 Key，使用该 Key 的调用立即失败。成功（200）：`{"ok": true}`；不存在返回 404。

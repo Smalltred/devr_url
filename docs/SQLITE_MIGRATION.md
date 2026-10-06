@@ -39,6 +39,7 @@ CREATE TABLE short_url_counter (
 | `auth_tokens` | 管理端登录态（token 的 sha256 哈希、创建/过期时间戳） |
 | `auth_throttle` | 登录失败限流（IP 匿名哈希 → 失败次数、窗口起点） |
 | `settings` | 运行时设置（短码最小长度、随机码、require_login、自定义密码哈希） |
+| `api_keys` | 开放 API Key（名称、sha256 哈希、展示前缀、创建时间、最近使用时间） |
 | `app_meta` | 内部元数据（IP 哈希的安装级随机盐等） |
 
 短码仍由 ID 经 `ShortCodeService::encode()` 生成，字符表与算法不变，`encode(1) = 'S'` 等向量不变。
