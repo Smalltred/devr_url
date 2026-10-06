@@ -19,16 +19,14 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="container mx-auto px-12">
-        <div class="min-h-screen">
-            <Header />
-            <div>
-                <Search />
-                <Result />
-            </div>
-        </div>
-        <footer class="pb-8 text-center font-mono text-sm">
-            <a href="/admin" class="text-black/40 hover:text-black">管理后台</a>
+    <div class="mx-auto flex min-h-screen max-w-3xl flex-col px-5 sm:px-8">
+        <Header />
+        <main class="flex-1">
+            <Search />
+            <Result />
+        </main>
+        <footer class="py-10 text-center text-sm text-ink-3">
+            <a href="/admin" class="transition-colors hover:text-accent">管理后台</a>
         </footer>
     </div>
 </template>

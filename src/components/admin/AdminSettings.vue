@@ -89,60 +89,60 @@ async function changePassword() {
 </script>
 
 <template>
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <!-- 短链与站点设置 -->
-        <div class="rounded-xl border-4 border-black bg-white p-6">
-            <h2 class="mb-6 text-xl font-bold">站点设置</h2>
+        <div class="glass card">
+            <h2 class="mb-6 text-lg font-semibold">站点设置</h2>
 
             <div class="mb-5">
-                <label class="mb-1 block text-sm font-bold" for="setting-length">短链最小长度（1-16）</label>
-                <p class="mb-2 text-xs text-black/50">新短码不足该长度时自动补齐；已有短链不受影响</p>
+                <label class="mb-1 block text-sm font-medium" for="setting-length">短链最小长度（1-16）</label>
+                <p class="mb-2 text-xs text-ink-3">新短码不足该长度时自动补齐；已有短链不受影响</p>
                 <input
                     id="setting-length"
                     v-model.number="codeMinLength"
                     type="number"
                     min="1"
                     max="16"
-                    class="w-32 rounded-lg border-2 border-black bg-yellow-100/60 px-3 py-2 outline-none focus:bg-yellow-100"
+                    class="input w-32"
                 />
             </div>
 
-            <div class="mb-5 flex items-start justify-between gap-4 border-t border-black/10 pt-5">
+            <div class="mb-5 flex items-start justify-between gap-4 border-t border-line pt-5">
                 <div>
-                    <div class="text-sm font-bold">随机短码</div>
-                    <p class="mt-1 text-xs text-black/50">开启后新短码随机生成、不可预测；长度至少为 3</p>
+                    <div class="text-sm font-medium">随机短码</div>
+                    <p class="mt-1 text-xs text-ink-3">开启后新短码随机生成、不可预测；长度至少为 3</p>
                 </div>
                 <button
                     type="button"
-                    class="shrink-0 rounded-lg border-2 border-black px-4 py-2 text-sm font-bold"
-                    :class="codeRandom ? 'bg-black text-yellow-100' : 'bg-white hover:bg-black/5'"
+                    class="switch"
+                    role="switch"
+                    :aria-checked="codeRandom"
+                    aria-label="随机短码"
                     @click="codeRandom = !codeRandom"
-                >
-                    {{ codeRandom ? '已开启' : '已关闭' }}
-                </button>
+                ></button>
             </div>
 
-            <div class="mb-5 flex items-start justify-between gap-4 border-t border-black/10 pt-5">
+            <div class="mb-6 flex items-start justify-between gap-4 border-t border-line pt-5">
                 <div>
-                    <div class="text-sm font-bold">创建短链需要登录</div>
-                    <p class="mt-1 text-xs text-black/50">开启后首页仅管理员可生成短链，未登录访问首页将跳转登录页</p>
+                    <div class="text-sm font-medium">创建短链需要登录</div>
+                    <p class="mt-1 text-xs text-ink-3">开启后首页仅管理员可生成短链，未登录访问首页将跳转登录页</p>
                 </div>
                 <button
                     type="button"
-                    class="shrink-0 rounded-lg border-2 border-black px-4 py-2 text-sm font-bold"
-                    :class="requireLogin ? 'bg-black text-yellow-100' : 'bg-white hover:bg-black/5'"
+                    class="switch"
+                    role="switch"
+                    :aria-checked="requireLogin"
+                    aria-label="创建短链需要登录"
                     @click="requireLogin = !requireLogin"
-                >
-                    {{ requireLogin ? '已开启' : '已关闭' }}
-                </button>
+                ></button>
             </div>
 
-            <p v-if="settingsError" class="mb-4 text-sm text-red-600">{{ settingsError }}</p>
+            <p v-if="settingsError" class="mb-4 text-sm text-danger">{{ settingsError }}</p>
 
             <button
                 type="button"
                 :disabled="savingSettings"
-                class="rounded-lg bg-black px-5 py-2 font-bold text-yellow-100 border-r-4 border-b-4 border-yellow-500 disabled:opacity-60"
+                class="btn btn-primary w-full sm:w-auto"
                 @click="saveSettings"
             >
                 {{ savingSettings ? '保存中…' : '保存设置' }}
@@ -150,46 +150,46 @@ async function changePassword() {
         </div>
 
         <!-- 修改密码 -->
-        <div class="rounded-xl border-4 border-black bg-white p-6">
-            <h2 class="mb-1 text-xl font-bold">修改密码</h2>
-            <p class="mb-6 text-xs text-black/50">
+        <div class="glass card">
+            <h2 class="mb-1 text-lg font-semibold">修改密码</h2>
+            <p class="mb-6 text-xs text-ink-3">
                 {{ passwordSource === 'custom' ? '当前使用后台修改过的密码' : '当前使用环境变量/默认密码（admin123），建议立即修改' }}
                 ，修改后所有登录端将被强制下线
             </p>
 
-            <label class="mb-1 block text-sm font-bold" for="pwd-current">当前密码</label>
+            <label class="mb-2 block text-sm font-medium text-ink-2" for="pwd-current">当前密码</label>
             <input
                 id="pwd-current"
                 v-model="currentPassword"
                 type="password"
                 autocomplete="current-password"
-                class="mb-4 w-full rounded-lg border-2 border-black bg-yellow-100/60 px-3 py-2 outline-none focus:bg-yellow-100"
+                class="input mb-4"
             />
 
-            <label class="mb-1 block text-sm font-bold" for="pwd-new">新密码（至少 8 位）</label>
+            <label class="mb-2 block text-sm font-medium text-ink-2" for="pwd-new">新密码（至少 8 位）</label>
             <input
                 id="pwd-new"
                 v-model="newPassword"
                 type="password"
                 autocomplete="new-password"
-                class="mb-4 w-full rounded-lg border-2 border-black bg-yellow-100/60 px-3 py-2 outline-none focus:bg-yellow-100"
+                class="input mb-4"
             />
 
-            <label class="mb-1 block text-sm font-bold" for="pwd-confirm">确认新密码</label>
+            <label class="mb-2 block text-sm font-medium text-ink-2" for="pwd-confirm">确认新密码</label>
             <input
                 id="pwd-confirm"
                 v-model="confirmPassword"
                 type="password"
                 autocomplete="new-password"
-                class="mb-4 w-full rounded-lg border-2 border-black bg-yellow-100/60 px-3 py-2 outline-none focus:bg-yellow-100"
+                class="input mb-5"
             />
 
-            <p v-if="passwordError" class="mb-4 text-sm text-red-600">{{ passwordError }}</p>
+            <p v-if="passwordError" class="mb-4 text-sm text-danger">{{ passwordError }}</p>
 
             <button
                 type="button"
                 :disabled="savingPassword"
-                class="rounded-lg bg-black px-5 py-2 font-bold text-yellow-100 border-r-4 border-b-4 border-yellow-500 disabled:opacity-60"
+                class="btn btn-primary w-full sm:w-auto"
                 @click="changePassword"
             >
                 {{ savingPassword ? '修改中…' : '修改密码' }}

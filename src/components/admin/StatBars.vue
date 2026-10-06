@@ -18,17 +18,17 @@ defineProps({
             <div
                 v-for="point in series"
                 :key="point.date"
-                class="flex flex-1 flex-col items-center justify-end"
+                class="group flex flex-1 flex-col items-center justify-end"
                 :title="`${point.date}：${point.clicks} 次点击`"
             >
                 <div
-                    class="w-full rounded-t-sm bg-black transition-all"
+                    class="w-full rounded-t-md transition-all duration-200"
+                    :class="point.clicks === 0 ? 'bg-line' : 'bg-accent group-hover:bg-accent-hover'"
                     :style="{ height: (Math.max(point.clicks, 0) / Math.max(...series.map(p => p.clicks), 1)) * 100 + '%' }"
-                    :class="point.clicks === 0 ? 'bg-black/10' : ''"
                 ></div>
             </div>
         </div>
-        <div class="mt-1 flex justify-between font-mono text-xs text-black/60">
+        <div class="tnum mt-2 flex justify-between text-xs text-ink-3">
             <span>{{ series[0]?.date?.slice(5) }}</span>
             <span>{{ series[series.length - 1]?.date?.slice(5) }}</span>
         </div>

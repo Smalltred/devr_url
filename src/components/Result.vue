@@ -30,29 +30,45 @@ onUnmounted(() => clearTimeout(copiedTimer))
 </script>
 
 <template>
-    <div v-if="entity" class="flex">
-        <img class="w-40 h-40 mr-10 rounded-lg" :src="entity.qrcode" alt="QRCode" />
-        <div class="flex-1 relative">
-            <p class="font-bold text-xl font-mono">
-                短链接：<a class="underline" :href="entity.shortUrl" target="_blank" rel="noopener noreferrer">{{ entity.shortUrl }}</a>
-            </p>
-            <p class="mt-4 text-xl font-mono font-light">
-                原链接：<a class="underline" :href="entity.originUrl" target="_blank" rel="noopener noreferrer">{{ entity.originUrl }}</a>
-            </p>
-            <div class="absolute left-0 bottom-0">
-                <div class="inline-block mr-3">
-                    <Button label="下载二维码" @click="handleDownload" />
-                </div>
-                <div class="inline-block mr-5">
-                    <Button label="复制短链接" @click="handleCopy" />
-                </div>
-                <div v-if="showCopied" class="inline-block h-5 leading-5 font-mono">
-                    <svg class="inline-block w-5 h-5 mr-1 align-top" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M17 9L9.99998 16L6.99994 13M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 16.9706 21 12Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                    已复制
+    <transition name="pop">
+        <div v-if="entity" class="glass card">
+            <div class="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+                <!-- 二维码始终保持白底，保证深色模式下可扫码 -->
+                <img
+                    class="h-40 w-40 shrink-0 rounded-xl border border-line bg-white p-2"
+                    :src="entity.qrcode"
+                    alt="QRCode"
+                />
+                <div class="w-full min-w-0 flex-1">
+                    <p class="break-all text-lg font-semibold">
+                        短链接：<a
+                            class="text-accent transition-colors hover:text-accent-hover"
+                            :href="entity.shortUrl"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >{{ entity.shortUrl }}</a>
+                    </p>
+                    <p class="mt-2 break-all text-sm text-ink-2">
+                        原链接：<a
+                            class="transition-colors hover:text-accent"
+                            :href="entity.originUrl"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >{{ entity.originUrl }}</a>
+                    </p>
+                    <div class="mt-6 flex flex-wrap items-center gap-3">
+                        <Button label="复制短链接" @click="handleCopy" />
+                        <Button label="下载二维码" variant="secondary" @click="handleDownload" />
+                        <span v-if="showCopied" class="chip chip-success">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
+                                <path d="M16.5 9.5 11 15l-2.5-2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            已复制
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </transition>
 </template>

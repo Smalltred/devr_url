@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import api from '../../services/entity'
 
 const props = defineProps({
@@ -32,45 +32,33 @@ const save = async () => {
         saving.value = false
     }
 }
+
+// Escape 关闭弹窗
+const onKeydown = e => {
+    if (e.key === 'Escape') {
+        emit('close')
+    }
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
-    <div class="fixed inset-0 z-40 flex items-center justify-center bg-black/60 px-6" @click.self="emit('close')">
-        <div class="w-full max-w-lg rounded-xl border-4 border-black bg-white p-6 font-mono shadow-[8px_8px_0_0_rgba(0,0,0,1)]">
-            <h2 class="mb-5 text-xl font-bold">编辑短链 /{{ link.code }}</h2>
+    <div class="modal-overlay" @click.self="emit('close')">
+        <div class="glass-strong card w-full max-w-lg" role="dialog" aria-modal="true">
+            <h2 class="mb-5 text-lg font-semibold">编辑短链 /{{ link.code }}</h2>
 
-            <label class="mb-1 block text-sm font-bold" for="edit-code">短码（改动后原短码立即失效）</label>
-            <input
-                id="edit-code"
-                v-model="code"
-                type="text"
-                class="mb-4 w-full rounded-lg border-2 border-black bg-yellow-100/60 px-3 py-2 outline-none focus:bg-yellow-100"
-            />
+            <label class="mb-2 block text-sm font-medium text-ink-2" for="edit-code">短码（改动后原短码立即失效）</label>
+            <input id="edit-code" v-model="code" type="text" class="input mb-4" />
 
-            <label class="mb-1 block text-sm font-bold" for="edit-url">目标链接</label>
-            <input
-                id="edit-url"
-                v-model="url"
-                type="text"
-                class="mb-4 w-full rounded-lg border-2 border-black bg-yellow-100/60 px-3 py-2 outline-none focus:bg-yellow-100"
-            />
+            <label class="mb-2 block text-sm font-medium text-ink-2" for="edit-url">目标链接</label>
+            <input id="edit-url" v-model="url" type="text" class="input mb-4" />
 
-            <p v-if="error" class="mb-4 text-sm text-red-600">{{ error }}</p>
+            <p v-if="error" class="mb-4 text-sm text-danger">{{ error }}</p>
 
             <div class="flex justify-end gap-3">
-                <button
-                    type="button"
-                    class="rounded-lg border-2 border-black px-4 py-2 font-bold hover:bg-black/5"
-                    @click="emit('close')"
-                >
-                    取消
-                </button>
-                <button
-                    type="button"
-                    :disabled="saving"
-                    class="rounded-lg bg-black px-4 py-2 font-bold text-yellow-100 border-r-4 border-b-4 border-yellow-500 disabled:opacity-60"
-                    @click="save"
-                >
+                <button type="button" class="btn btn-secondary" @click="emit('close')">取消</button>
+                <button type="button" :disabled="saving" class="btn btn-primary" @click="save">
                     {{ saving ? '保存中…' : '保存' }}
                 </button>
             </div>

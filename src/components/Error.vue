@@ -5,7 +5,7 @@ const { error } = useShortUrl()
 </script>
 
 <template>
-    <div v-if="error" class="py-4 font-mono text-lg text-red-600">
+    <p v-if="error" class="mt-3 text-sm font-medium text-danger">
         {{ error }}
-    </div>
+    </p>
 </template>

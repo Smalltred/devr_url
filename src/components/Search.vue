@@ -16,15 +16,16 @@ const handleClick = async () => {
 </script>
 
 <template>
-    <div class="mb-10">
-        <div class="flex">
+    <div class="glass-strong card mb-8 mt-12">
+        <div class="flex flex-col gap-3 sm:flex-row">
             <input
                 v-model="url"
-                class="outline-none flex-1 mr-4 px-5 py-3 rounded-lg font-mono text-lg text-black bg-yellow-100 bg-opacity-80 placeholder-yellow-900 placeholder-opacity-30"
+                class="input flex-1"
                 placeholder="请输入 http:// 或 https:// 开头的网址"
+                aria-label="原始网址"
                 @keyup.enter="handleClick"
             />
-            <Button label=")缩(" @click="handleClick" />
+            <Button label="生成短链" class="w-full sm:w-auto" @click="handleClick" />
         </div>
         <Error />
     </div>
