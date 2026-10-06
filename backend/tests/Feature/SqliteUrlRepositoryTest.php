@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Foundation\App;
+use App\Repositories\SqliteClickRepository;
 use App\Repositories\SqliteUrlRepository;
 use App\Services\DatabaseService;
 use App\Services\ShortCodeService;
@@ -90,6 +91,56 @@ final class SqliteUrlRepositoryTest extends TestCase
         $redirect = $app->handle(TestApp::request('GET', '/S'));
         self::assertSame(302, $redirect->status());
         self::assertSame('https://example.com', $redirect->header('location'));
+    }
+
+    public function testUpdateMigratesClicksWhenCodeChanges(): void
+    {
+        $repository = $this->repository();
+        $repository->save('abc', 'https://example.com');
+
+        $clicks = new SqliteClickRepository(new DatabaseService(self::config($this->path)));
+        $clicks->record('abc', ['referer' => null, 'referer_host' => null, 'device' => 'desktop', 'ip_hash' => null]);
+        $clicks->record('abc', ['referer' => null, 'referer_host' => null, 'device' => 'desktop', 'ip_hash' => null]);
+
+        $repository->update('abc', 'xyz', 'https://changed.example.com');
+
+        self::assertSame('https://changed.example.com', $repository->findByCode('xyz'));
+        self::assertFalse($repository->exists('abc'));
+        self::assertSame(['xyz' => 2], $clicks->totalByCodes(['xyz']), '改短码后点击统计必须跟随迁移');
+    }
+
+    public function testDeleteCascadesClicks(): void
+    {
+        $repository = $this->repository();
+        $repository->save('abc', 'https://example.com');
+
+        $clicks = new SqliteClickRepository(new DatabaseService(self::config($this->path)));
+        $clicks->record('abc', ['referer' => null, 'referer_host' => null, 'device' => 'desktop', 'ip_hash' => null]);
+
+        $repository->delete('abc');
+
+        self::assertFalse($repository->exists('abc'));
+        self::assertSame(0, $clicks->totalAll(), '删除短链必须级联删除点击记录');
+    }
+
+    public function testPaginateFiltersSearchesAndCounts(): void
+    {
+        $repository = $this->repository();
+        $repository->save('alpha', 'https://foo.com/a');
+        $repository->save('beta', 'https://bar.com/b');
+        $repository->save('gamma', 'https://foo.com/g');
+
+        $all = $repository->paginate(2, 0, '');
+        self::assertSame(3, $all['total']);
+        self::assertCount(2, $all['items']);
+
+        $byUrl = $repository->paginate(10, 0, 'bar.com');
+        self::assertSame(1, $byUrl['total']);
+        self::assertSame('beta', $byUrl['items'][0]['code']);
+
+        // LIKE 通配符必须被转义，不产生误匹配
+        $wildcard = $repository->paginate(10, 0, '%');
+        self::assertSame(0, $wildcard['total']);
     }
 
     private function repository(): SqliteUrlRepository

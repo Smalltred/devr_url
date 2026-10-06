@@ -4,18 +4,32 @@ declare(strict_types=1);
 
 namespace App\Foundation;
 
+use App\Controllers\AdminController;
+use App\Controllers\AuthController;
 use App\Controllers\UrlController;
 use App\Exceptions\ConfigurationException;
 use App\Http\ExceptionHandler;
 use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
+use App\Repositories\AuthRepository;
+use App\Repositories\ClickRepository;
+use App\Repositories\SettingsRepository;
+use App\Repositories\SqliteAuthRepository;
+use App\Repositories\SqliteClickRepository;
+use App\Repositories\SqliteMetaRepository;
+use App\Repositories\SqliteSettingsRepository;
 use App\Repositories\SqliteUrlRepository;
 use App\Repositories\UrlRepository;
+use App\Services\AdminService;
+use App\Services\AuthService;
 use App\Services\DatabaseService;
+use App\Services\ClickTracker;
+use App\Services\SettingsService;
 use App\Services\ShortCodeService;
 use App\Services\ShortUrlService;
 use App\Support\Config;
+use App\Support\IpHasher;
 use App\Support\Logger;
 use App\Validation\UrlValidator;
 
@@ -31,12 +45,42 @@ final class App
     ) {
     }
 
-    public static function create(Config $config, ?UrlRepository $repository = null, ?Logger $logger = null): self
-    {
+    public static function create(
+        Config $config,
+        ?UrlRepository $repository = null,
+        ?Logger $logger = null,
+        ?ClickRepository $clickRepository = null,
+        ?AuthRepository $authRepository = null,
+        ?SettingsRepository $settingsRepository = null,
+    ): self {
         $logger ??= new Logger((string) $config->get('logging.path', sys_get_temp_dir().'/short-url-logs'));
-        $repository ??= new SqliteUrlRepository(new DatabaseService($config));
+        $database = new DatabaseService($config);
 
-        $controller = new UrlController(new ShortUrlService($repository, new ShortCodeService(), new UrlValidator()));
+        $repository ??= new SqliteUrlRepository($database);
+        $clickRepository ??= new SqliteClickRepository($database);
+        $authRepository ??= new SqliteAuthRepository($database);
+        $settingsRepository ??= new SqliteSettingsRepository($database);
+        $settings = new SettingsService($settingsRepository);
+
+        $validator = new UrlValidator();
+        $ipHasher = new IpHasher(new SqliteMetaRepository($database));
+
+        $urlController = new UrlController(
+            new ShortUrlService($repository, new ShortCodeService(), $validator, $settings),
+            new ClickTracker($clickRepository, $ipHasher),
+            $logger,
+        );
+
+        $authService = new AuthService($authRepository, $config, $logger, $ipHasher, $settings);
+        $authController = new AuthController($authService, $settings);
+
+        $adminService = new AdminService($repository, $clickRepository, $validator, $settings);
+        $adminController = new AdminController(
+            $adminService,
+            $authService,
+            (string) $config->get('app.dist_index', dirname(__DIR__, 3).'/dist/index.html'),
+        );
+
         $router = new Router();
 
         $register = require dirname(__DIR__, 2).'/routes/web.php';
@@ -44,7 +88,7 @@ final class App
             throw new ConfigurationException('routes/web.php must return a Closure');
         }
 
-        $register($router, $controller);
+        $register($router, $urlController, $authController, $adminController, $authService, $settings);
 
         return new self($router, new ExceptionHandler($config, $logger));
     }

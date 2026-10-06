@@ -86,4 +86,115 @@ final class SqliteUrlRepository implements UrlRepository
             return $statement->fetchColumn() !== false;
         });
     }
+
+    public function countAll(): int
+    {
+        return $this->database->execute(static function (PDO $pdo): int {
+            $statement = $pdo->prepare('SELECT COUNT(*) FROM short_urls');
+            $statement->execute();
+
+            return (int) $statement->fetchColumn();
+        });
+    }
+
+    public function paginate(int $limit, int $offset, string $query): array
+    {
+        return $this->database->execute(static function (PDO $pdo) use ($limit, $offset, $query): array {
+            $like = self::likePattern($query);
+            $where = $like === null ? '' : 'WHERE code LIKE :like ESCAPE \'\\\' OR url LIKE :like ESCAPE \'\\\'';
+
+            $countStatement = $pdo->prepare('SELECT COUNT(*) FROM short_urls '.$where);
+            if ($like !== null) {
+                $countStatement->bindValue(':like', $like, PDO::PARAM_STR);
+            }
+            $countStatement->execute();
+            $total = (int) $countStatement->fetchColumn();
+
+            $statement = $pdo->prepare(
+                'SELECT code, url, created_at FROM short_urls '.$where.' ORDER BY created_at DESC, rowid DESC LIMIT :limit OFFSET :offset',
+            );
+            if ($like !== null) {
+                $statement->bindValue(':like', $like, PDO::PARAM_STR);
+            }
+            $statement->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $statement->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $statement->execute();
+
+            /** @var list<array<string, mixed>> $rows */
+            $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
+
+            $items = [];
+            foreach ($rows as $row) {
+                $items[] = [
+                    'code' => (string) $row['code'],
+                    'url' => (string) $row['url'],
+                    'created_at' => (string) $row['created_at'],
+                ];
+            }
+
+            return ['items' => $items, 'total' => $total];
+        });
+    }
+
+    public function update(string $code, string $newCode, string $url): void
+    {
+        $this->database->execute(static function (PDO $pdo) use ($code, $newCode, $url): void {
+            $pdo->exec('BEGIN IMMEDIATE');
+            try {
+                $statement = $pdo->prepare('UPDATE short_urls SET code = :new_code, url = :url WHERE code = :code');
+                $statement->bindValue(':new_code', $newCode, PDO::PARAM_STR);
+                $statement->bindValue(':url', $url, PDO::PARAM_STR);
+                $statement->bindValue(':code', $code, PDO::PARAM_STR);
+                $statement->execute();
+
+                if ($newCode !== $code) {
+                    $migrate = $pdo->prepare('UPDATE short_url_clicks SET code = :new_code WHERE code = :code');
+                    $migrate->bindValue(':new_code', $newCode, PDO::PARAM_STR);
+                    $migrate->bindValue(':code', $code, PDO::PARAM_STR);
+                    $migrate->execute();
+                }
+
+                $pdo->exec('COMMIT');
+            } catch (\Throwable $exception) {
+                $pdo->exec('ROLLBACK');
+
+                throw $exception;
+            }
+        });
+    }
+
+    public function delete(string $code): void
+    {
+        $this->database->execute(static function (PDO $pdo) use ($code): void {
+            $pdo->exec('BEGIN IMMEDIATE');
+            try {
+                $statement = $pdo->prepare('DELETE FROM short_urls WHERE code = :code');
+                $statement->bindValue(':code', $code, PDO::PARAM_STR);
+                $statement->execute();
+
+                $clicks = $pdo->prepare('DELETE FROM short_url_clicks WHERE code = :code');
+                $clicks->bindValue(':code', $code, PDO::PARAM_STR);
+                $clicks->execute();
+
+                $pdo->exec('COMMIT');
+            } catch (\Throwable $exception) {
+                $pdo->exec('ROLLBACK');
+
+                throw $exception;
+            }
+        });
+    }
+
+    /**
+     * 构造 LIKE 模式（两侧通配），转义 % _ \ 通配符；空查询返回 null 表示不过滤。
+     */
+    private static function likePattern(string $query): ?string
+    {
+        $trimmed = trim($query);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        return '%'.str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $trimmed).'%';
+    }
 }

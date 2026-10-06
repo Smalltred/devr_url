@@ -8,7 +8,8 @@ export default defineConfig({
         port: 3000,
         proxy: {
             '/url': 'http://127.0.0.1:3001',
-            '/api/url': 'http://127.0.0.1:3001',
+            // 覆盖 /api/url、/api/auth/*、/api/admin/* 全部规范化接口
+            '/api': 'http://127.0.0.1:3001',
         },
     },
 })

@@ -34,3 +34,7 @@ yarn-error.log*
 
 # SQLite database
 /backend/storage/*.sqlite3*
+/baota-package/
+
+# ZCode local workspace
+/.zcode/

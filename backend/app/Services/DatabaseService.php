@@ -27,6 +27,35 @@ final class DatabaseService
             id INTEGER NOT NULL
         )',
         'INSERT INTO short_url_counter (id) SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM short_url_counter)',
+        'CREATE TABLE IF NOT EXISTS short_url_clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            clicked_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
+            referer TEXT,
+            referer_host TEXT,
+            device TEXT,
+            ip_hash TEXT
+        )',
+        'CREATE INDEX IF NOT EXISTS idx_clicks_code_time ON short_url_clicks (code, clicked_at)',
+        'CREATE INDEX IF NOT EXISTS idx_clicks_time ON short_url_clicks (clicked_at)',
+        'CREATE TABLE IF NOT EXISTS auth_tokens (
+            token_hash TEXT PRIMARY KEY,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL
+        )',
+        'CREATE TABLE IF NOT EXISTS auth_throttle (
+            ip_hash TEXT PRIMARY KEY,
+            fails INTEGER NOT NULL,
+            window_start INTEGER NOT NULL
+        )',
+        'CREATE TABLE IF NOT EXISTS app_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )',
+        'CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )',
     ];
 
     private ?PDO $pdo = null;

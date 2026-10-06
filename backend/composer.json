@@ -1,6 +1,6 @@
 {
-    "name": "onee-io/short-url-backend",
-    "description": "Short URL service backend - PHP 8.2 + SQLite (migrated from Node.js/Express)",
+    "name": "devr/short-url-backend",
+    "description": "devr - Short URL service backend - PHP 8.2 + SQLite",
     "type": "project",
     "license": "MIT",
     "require": {

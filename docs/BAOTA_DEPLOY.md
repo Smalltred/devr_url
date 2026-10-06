@@ -1,5 +1,11 @@
 # 宝塔面板部署文档（Nginx + PHP 8.2 + PHP-FPM + SQLite）
 
+> **快捷方式**：不想从源码折腾，可直接使用开箱即用部署包 **`baota-package/`**（项目根目录，
+> 已含编译好的前后端与生产配置，标准 PHP 结构：`public/` 为 Web 运行目录）。
+> 步骤：上传到站点目录 → 运行目录选 `/public` → PHP 8.2+（pdo_sqlite）→ Nginx 粘贴一次伪静态
+> （Apache 零配置）。生成/更新方式：`npm run build` 后执行 `php deploy/build-baota-package.php`，
+> 详细步骤与自检页（`/check.php`）说明见包内 `部署说明.md`。本文其余部分描述"从仓库源码部署"的完整流程。
+
 目标：把 short-url 部署到宝塔面板的 `/www/wwwroot/short-url`，短码路由 `/xxxxx` 正确交给 PHP，静态资源正常访问。
 
 ## 1. 环境准备（宝塔软件商店）

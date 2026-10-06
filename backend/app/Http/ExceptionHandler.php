@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace App\Http;
 
 use App\Exceptions\ConfigurationException;
+use App\Exceptions\ConflictException;
 use App\Exceptions\InvalidUrlException;
 use App\Exceptions\ShortCodeNotFoundException;
 use App\Exceptions\StorageException;
+use App\Exceptions\ThrottleException;
+use App\Exceptions\UnauthorizedException;
+use App\Exceptions\ValidationException;
 use App\Support\Config;
 use App\Support\Logger;
 
@@ -25,6 +29,10 @@ final class ExceptionHandler
     {
         [$status, $publicMessage, $isServerError] = match (true) {
             $exception instanceof InvalidUrlException => [400, 'Incorrect URL format', false],
+            $exception instanceof ValidationException => [400, $exception->getMessage() !== '' ? $exception->getMessage() : 'Validation Failed', false],
+            $exception instanceof ConflictException => [409, 'Short Code Already Exists', false],
+            $exception instanceof UnauthorizedException => [401, $exception->getMessage() !== '' ? $exception->getMessage() : 'Unauthorized', false],
+            $exception instanceof ThrottleException => [429, 'Too Many Attempts', false],
             $exception instanceof ShortCodeNotFoundException => [404, 'Unknown URL', false],
             $exception instanceof StorageException => [503, 'Service Unavailable', true],
             $exception instanceof ConfigurationException => [500, 'Internal Server Error', true],

@@ -54,6 +54,16 @@ final class Response
         return new self($status, $headers, $body);
     }
 
+    /**
+     * @param array<string, string> $headers
+     */
+    public static function html(string $body, int $status = 200, array $headers = []): self
+    {
+        $headers['content-type'] = 'text/html; charset=utf-8';
+
+        return new self($status, $headers, $body);
+    }
+
     public function status(): int
     {
         return $this->status;

@@ -20,6 +20,10 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
+      # 管理后台凭据：生产务必修改（推荐用 ADMIN_PASSWORD_HASH，见 README「管理后台」）
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: "admin123"
+      # ADMIN_PASSWORD_HASH: ""
       # DATABASE_PATH 留空使用默认值 /app/backend/storage/short-url.sqlite3
       # DATABASE_PATH:
     volumes:

@@ -24,6 +24,7 @@ final class Request
         private readonly array $query = [],
         private readonly array $headers = [],
         private array $params = [],
+        private readonly string $remoteAddress = '',
     ) {
         $this->decodedBody = $rawBody === '' ? null : json_decode($rawBody, true);
     }
@@ -55,6 +56,8 @@ final class Request
             $rawBody,
             $_GET,
             $headers,
+            [],
+            (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
         );
     }
 
@@ -74,6 +77,36 @@ final class Request
     public function header(string $name): ?string
     {
         return $this->headers[strtolower($name)] ?? null;
+    }
+
+    /**
+     * 客户端 IP（REMOTE_ADDR 原值，代理判定交给部署层）。
+     */
+    public function clientIp(): string
+    {
+        return $this->remoteAddress;
+    }
+
+    /**
+     * 按名称读取 Cookie；不存在返回 null。
+     */
+    public function cookie(string $name): ?string
+    {
+        $header = $this->header('cookie');
+        if ($header === null) {
+            return null;
+        }
+
+        foreach (explode(';', $header) as $pair) {
+            $parts = explode('=', $pair, 2);
+            if (count($parts) === 2 && trim($parts[0]) === $name) {
+                $decoded = rawurldecode(trim($parts[1]));
+
+                return $decoded === '' ? null : $decoded;
+            }
+        }
+
+        return null;
     }
 
     public function queryParam(string $key): ?string
