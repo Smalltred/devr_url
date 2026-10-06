@@ -144,6 +144,9 @@ npm run build
 php deploy/build-baota-package.php    # 生成 baota-package/ 目录（已 gitignore）
 ```
 
+再次打包时会自动生成 `update/` 增量文件夹（相对上一次包仅需替换的文件 + 更新说明清单，
+永不含 SQLite 数据库），日常更新按路径覆盖即可，无需整包重传；跨多个版本时整包重传一次对齐。
+
 上传步骤与自检页（`/check.php`）说明见包内 `部署说明.md`，亦可参考 [deploy/baota/部署说明.md](deploy/baota/部署说明.md)。
 
 ## 环境变量
@@ -185,8 +188,10 @@ short-url/
 ├── deploy/
 │   ├── nginx/             # 通用(宝塔) / docker 单容器 / compose 三种 Nginx 配置
 │   ├── baota/             # 开箱即用部署包的伪静态、public 骨架与部署说明
-│   ├── build-baota-package.php  # 打包脚本（生成 baota-package/）
+│   ├── build-baota-package.php  # 打包脚本（生成 baota-package/，含 update/ 增量包）
 │   └── supervisord.conf   # 单容器进程托管
+├── tools/
+│   └── generate-icons.mjs # 站点图标生成脚本（node tools/generate-icons.mjs 重制 favicon.ico / logo100.png）
 ├── docs/                  # API / 迁移 / 宝塔部署等文档
 ├── Dockerfile             # 多阶段构建（默认：nginx+php-fpm 单容器；--target app/web 供 compose 用）
 └── docker-compose.yml     # 双容器部署（web + app）
