@@ -10,7 +10,9 @@
 > - 新增管理后台：登录认证、全站/单链点击统计、短链编辑删除、运行时设置（无需重启即时生效）；
 > - 迁移与演进记录见 [docs/MIGRATION.md](docs/MIGRATION.md)。
 
-![Demo](https://cdn.jsdelivr.net/gh/onee-io/short-url/docs/demo1.gif)
+![首页 · 浅色主题](docs/screenshot-home-light.png)
+
+![首页 · 深色主题](docs/screenshot-home-dark.png)
 
 ## 功能特性
 

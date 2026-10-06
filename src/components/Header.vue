@@ -4,7 +4,8 @@ import ThemeToggle from './ThemeToggle.vue'
 
 <template>
     <header class="pt-6">
-        <div class="flex items-center justify-end">
+        <div class="flex items-center justify-end gap-2">
+            <a href="/admin" class="btn btn-ghost btn-sm">管理后台</a>
             <ThemeToggle />
         </div>
         <div class="mt-14 text-center sm:mt-20">

@@ -25,8 +25,5 @@ onMounted(async () => {
             <Search />
             <Result />
         </main>
-        <footer class="py-10 text-center text-sm text-ink-3">
-            <a href="/admin" class="transition-colors hover:text-accent">管理后台</a>
-        </footer>
     </div>
 </template>
