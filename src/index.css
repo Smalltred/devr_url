@@ -348,11 +348,17 @@
         transform: translateX(20px);
     }
 
-    /* 表格行与行内操作 */
-    .row-hover {
+    /* 表格行与行内操作：高亮背景落在 td 上，外角圆角与卡片圆角呼应 */
+    .row-hover > td {
         transition: background var(--duration-fast) var(--ease);
     }
-    .row-hover:hover {
+    .row-hover > td:first-child {
+        border-radius: var(--radius-md) 0 0 var(--radius-md);
+    }
+    .row-hover > td:last-child {
+        border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    }
+    .row-hover:hover > td {
         background: var(--color-accent-soft);
     }
     .action-btn {
@@ -421,6 +427,39 @@
 .pop-enter-from {
     opacity: 0;
     transform: translateY(8px);
+}
+
+/* 弹窗过渡：遮罩淡入淡出，卡片轻微缩放上浮 */
+.modal-enter-active,
+.modal-leave-active {
+    transition: opacity var(--duration-normal) var(--ease);
+}
+.modal-enter-active > *,
+.modal-leave-active > * {
+    transition: transform var(--duration-normal) var(--ease), opacity var(--duration-normal) var(--ease);
+}
+.modal-enter-from,
+.modal-leave-to {
+    opacity: 0;
+}
+.modal-enter-from > *,
+.modal-leave-to > * {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+}
+
+/* 选项卡内容切换 */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+    transition: opacity var(--duration-normal) var(--ease), transform var(--duration-normal) var(--ease);
+}
+.fade-slide-enter-from {
+    opacity: 0;
+    transform: translateY(10px);
+}
+.fade-slide-leave-to {
+    opacity: 0;
+    transform: translateY(-6px);
 }
 
 @media (prefers-reduced-motion: reduce) {

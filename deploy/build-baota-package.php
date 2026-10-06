@@ -30,6 +30,21 @@ if (!is_file($distDir.'/index.html')) {
     exit(1);
 }
 
+// ---------- 0) 增量基线：必须在重建前采集（上次清单 > 磁盘旧包） ----------
+$manifestFile = $projectRoot.'/deploy/.package-manifest.json';
+$previous = null;
+$baseline = '首次生成（无基线）';
+if (is_file($manifestFile)) {
+    $decoded = json_decode((string) file_get_contents($manifestFile), true);
+    if (is_array($decoded)) {
+        $previous = $decoded;
+        $baseline = '上次生成的清单';
+    }
+} elseif (is_dir($packageDir)) {
+    $previous = build_manifest($packageDir);
+    $baseline = '磁盘上的旧包';
+}
+
 // ---------- 1) 重建包目录 ----------
 remove_directory($packageDir);
 foreach ([$packageDir, $packageDir.'/public', $packageDir.'/storage/logs'] as $dir) {
@@ -95,7 +110,105 @@ $database->execute(static function (PDO $pdo): void {
 unset($database);
 echo "数据库已初始化\n";
 
+// ---------- 8) 增量更新文件夹（update/：相对基线需要替换的文件） ----------
+$current = build_manifest($packageDir);
+
+$updateDir = $packageDir.'/update';
+remove_directory($updateDir);
+if (!mkdir($updateDir, 0777, true)) {
+    fwrite(STDERR, "无法创建目录：$updateDir\n");
+    exit(1);
+}
+
+$added = $modified = [];
+if ($previous === null) {
+    // 首次生成：update/ 等同全量（不含 storage 数据与日志）
+    $added = array_keys($current);
+    $deleted = [];
+    $note = '首次生成基线：update/ 内为完整包内容（等同全量部署，已排除数据库与日志）。';
+} else {
+    foreach ($current as $relPath => $hash) {
+        if (!array_key_exists($relPath, $previous)) {
+            $added[] = $relPath;
+        } elseif ($previous[$relPath] !== $hash) {
+            $modified[] = $relPath;
+        }
+    }
+    $deleted = array_keys(array_diff_key($previous, $current));
+    $note = count($added) === 0 && count($modified) === 0 && count($deleted) === 0
+        ? '与基线完全一致，无需上传任何文件。'
+        : '把 update/ 内的文件按相同相对路径覆盖到服务器站点目录即可（不含数据库，服务器数据不受影响）。';
+}
+
+foreach (array_merge($added, $modified) as $relPath) {
+    $target = $updateDir.'/'.$relPath;
+    $parent = dirname($target);
+    if (!is_dir($parent) && !mkdir($parent, 0777, true)) {
+        fwrite(STDERR, "无法创建目录：$parent\n");
+        exit(1);
+    }
+    copy($packageDir.'/'.$relPath, $target);
+}
+
+$instruction = "增量更新清单（生成时间 ".date('Y-m-d H:i')."，基线：{$baseline}）\n"
+    .str_repeat('=', 40)."\n\n$note\n\n"
+    ."需覆盖的文件（".count(array_merge($added, $modified))." 个）：\n";
+foreach ($added as $relPath) {
+    $instruction .= "  [新增] $relPath\n";
+}
+foreach ($modified as $relPath) {
+    $instruction .= "  [修改] $relPath\n";
+}
+$instruction .= "\n需从服务器删除的文件（".count($deleted)." 个，旧版本残留）：\n";
+$instruction .= count($deleted) === 0 ? "  （无）\n" : '';
+foreach ($deleted as $relPath) {
+    $instruction .= "  [-] $relPath\n";
+}
+$instruction .= "\n注意：\n"
+    ."  1. update/ 不会包含 storage/short-url.sqlite3（服务器数据请勿被包内空库覆盖）；\n"
+    ."  2. 若服务器版本落后多个版本，建议改为整包重传一次以对齐基线；\n"
+    ."  3. 上传完成后可访问 /check.php 验证。\n";
+file_put_contents($updateDir.'/更新说明.txt', $instruction);
+
+file_put_contents($manifestFile, (string) json_encode($current, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+$changeCount = count(array_merge($added, $modified));
+echo "增量更新：$changeCount 个文件需要替换（见 baota-package/update/）\n";
 echo "部署包已生成：$packageDir\n";
+
+/**
+ * 计算包内文件清单（相对路径 => md5），排除数据库、日志与 update 自身。
+ *
+ * @return array<string, string>
+ */
+function build_manifest(string $dir): array
+{
+    $manifest = [];
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::LEAVES_ONLY,
+    );
+    foreach ($iterator as $item) {
+        if (!$item->isFile()) {
+            continue;
+        }
+
+        $relPath = str_replace('\\', '/', substr($item->getPathname(), strlen($dir) + 1));
+        if (
+            str_starts_with($relPath, 'storage/short-url.sqlite3')
+            || str_starts_with($relPath, 'storage/logs/')
+            || str_starts_with($relPath, 'update/')
+        ) {
+            continue;
+        }
+
+        $manifest[$relPath] = md5_file($item->getPathname());
+    }
+
+    ksort($manifest);
+
+    return $manifest;
+}
 
 function recurse_copy(string $src, string $dst): void
 {

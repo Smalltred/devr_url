@@ -4,6 +4,7 @@ import api from '../services/entity'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import AdminLogin from '../components/admin/AdminLogin.vue'
 import AdminSettings from '../components/admin/AdminSettings.vue'
+import ConfirmDialog from '../components/admin/ConfirmDialog.vue'
 import EditLinkModal from '../components/admin/EditLinkModal.vue'
 import LinkStatsModal from '../components/admin/LinkStatsModal.vue'
 import StatBars from '../components/admin/StatBars.vue'
@@ -26,6 +27,8 @@ const notice = ref('')
 
 const editing = ref(null)
 const statsCode = ref('')
+// 待确认删除的短链，非空时显示主题确认弹窗
+const pendingDelete = ref(null)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
 
@@ -113,8 +116,14 @@ function formatTime(value) {
     return typeof value === 'string' ? value.replace('T', ' ').slice(0, 16) : ''
 }
 
-async function removeLink(item) {
-    if (!window.confirm(`确定删除短链 /${item.code} ？删除后立即失效，点击记录一并清除。`)) {
+function removeLink(item) {
+    pendingDelete.value = item
+}
+
+async function confirmRemove() {
+    const item = pendingDelete.value
+    pendingDelete.value = null
+    if (!item) {
         return
     }
     try {
@@ -163,11 +172,17 @@ function showNotice(message) {
                 <button type="button" :class="{ active: tab === 'settings' }" @click="tab = 'settings'">设置</button>
             </div>
 
-            <AdminSettings v-if="tab === 'settings'" @password-changed="onPasswordChanged" @notice="showNotice" />
+            <transition name="fade-slide" mode="out-in">
+                <AdminSettings
+                    v-if="tab === 'settings'"
+                    key="settings"
+                    @password-changed="onPasswordChanged"
+                    @notice="showNotice"
+                />
 
-            <template v-if="tab === 'links'">
-            <!-- 概览卡片 -->
-            <div v-if="overview" class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div v-else key="links">
+                <!-- 概览卡片 -->
+                <div v-if="overview" class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div class="glass card">
                     <div class="tnum text-3xl font-semibold">{{ overview.links }}</div>
                     <div class="mt-1 text-sm text-ink-2">短链总数</div>
@@ -302,17 +317,33 @@ function showNotice(message) {
                         </button>
                     </div>
                 </div>
-            </div>
-            </template>
+                </div>
+                </div>
+            </transition>
 
             <!-- 弹窗 -->
-            <EditLinkModal
-                v-if="editing"
-                :link="editing"
-                @close="editing = null"
-                @saved="editing = null; showNotice('已保存'); refresh()"
-            />
-            <LinkStatsModal v-if="statsCode" :code="statsCode" @close="statsCode = ''" />
+            <transition name="modal">
+                <ConfirmDialog
+                    v-if="pendingDelete"
+                    title="删除短链"
+                    :message="`确定删除短链 /${pendingDelete.code} ？删除后立即失效，点击记录一并清除。`"
+                    confirm-text="删除"
+                    danger
+                    @confirm="confirmRemove"
+                    @close="pendingDelete = null"
+                />
+            </transition>
+            <transition name="modal">
+                <EditLinkModal
+                    v-if="editing"
+                    :link="editing"
+                    @close="editing = null"
+                    @saved="editing = null; showNotice('已保存'); refresh()"
+                />
+            </transition>
+            <transition name="modal">
+                <LinkStatsModal v-if="statsCode" :code="statsCode" @close="statsCode = ''" />
+            </transition>
 
             <!-- 轻提示 -->
             <transition name="toast">

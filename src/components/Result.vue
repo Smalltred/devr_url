@@ -40,17 +40,21 @@ onUnmounted(() => clearTimeout(copiedTimer))
                     alt="QRCode"
                 />
                 <div class="w-full min-w-0 flex-1">
-                    <p class="break-all text-lg font-semibold">
-                        短链接：<a
-                            class="text-accent transition-colors hover:text-accent-hover"
+                    <p class="flex items-baseline text-lg font-semibold">
+                        <span class="shrink-0">短链接：</span>
+                        <a
+                            class="min-w-0 truncate text-accent transition-colors hover:text-accent-hover"
                             :href="entity.shortUrl"
                             target="_blank"
                             rel="noopener noreferrer"
                         >{{ entity.shortUrl }}</a>
                     </p>
-                    <p class="mt-2 break-all text-sm text-ink-2">
-                        原链接：<a
-                            class="transition-colors hover:text-accent"
+                    <!-- 原链接超长时单行截断，完整地址见悬浮提示 -->
+                    <p class="mt-2 flex items-baseline text-sm text-ink-2">
+                        <span class="shrink-0">原链接：</span>
+                        <a
+                            class="min-w-0 truncate transition-colors hover:text-accent"
+                            :title="entity.originUrl"
                             :href="entity.originUrl"
                             target="_blank"
                             rel="noopener noreferrer"
