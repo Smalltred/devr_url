@@ -4,9 +4,9 @@
 > 已含编译好的前后端与生产配置，标准 PHP 结构：`public/` 为 Web 运行目录）。
 > 步骤：上传到站点目录 → 运行目录选 `/public` → PHP 8.2+（pdo_sqlite）→ Nginx 粘贴一次伪静态
 > （Apache 零配置）。生成/更新方式：`npm run build` 后执行 `php deploy/build-baota-package.php`；
-> 重新打包会自动产出 `update/` 增量文件夹（相对上次包需替换的文件，永不含 SQLite 数据），
-> 日常更新按路径覆盖即可。
-> 详细步骤与自检页（`/check.php`）说明见包内 `部署说明.md`。本文其余部分描述"从仓库源码部署"的完整流程。
+> 包内 `update/` 为相对已部署基线的增量（永不含 SQLite 数据与 `.env`），上传后执行
+> `php deploy/build-baota-package.php --mark-deployed` 推进基线。
+> 详细步骤与自检页（`/check.php?token=<令牌>`）说明见包内 `部署说明.md`。本文其余部分描述"从仓库源码部署"的完整流程。
 
 目标：把 short-url 部署到宝塔面板的 `/www/wwwroot/short-url`，短码路由 `/xxxxx` 正确交给 PHP，静态资源正常访问。
 
@@ -17,14 +17,20 @@
 | Nginx | 任意近期版本（1.20+） |
 | PHP | **8.2**（多版本共存时，站点需单独选中 8.2） |
 | SQLite | PHP 内置 pdo_sqlite 驱动，无需单独安装数据库服务 |
+| Memcached | **可选**：短链跳转缓存；未安装时自动降级为直连数据库，功能不受影响 |
 
 PHP 8.2 扩展（宝塔 → 软件商店 → PHP 8.2 → 设置 → 安装扩展）：
 
 - `pdo_sqlite`（必须，宝塔官方包一般默认内置）
 - `fileinfo`（必须，一般默认已装）
 - `mbstring`、`json`（必须，官方包默认内置，确认未被卸载）
+- `memcached`（**可选**，用于短链跳转缓存；安装后需重载 PHP-FPM）
 
 检查：宝塔 → PHP 8.2 → phpinfo，搜索 `pdo_sqlite` 确认驱动已加载。
+
+> **启用短链缓存（可选）**：宝塔 → 软件商店 → 安装 Memcached 服务 + PHP 8.2 的 `memcached` 扩展，
+> 然后在 `.env` 设置 `MEMCACHED_SERVERS=127.0.0.1:11211`（默认值即此，通常无需改动）。
+> 缓存有效期与负缓存时长可在后台「设置」页查看与调整；不装 Memcached 时跳转仍直连数据库，功能不受影响。
 
 ## 2. 上传代码
 

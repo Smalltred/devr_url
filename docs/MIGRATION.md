@@ -10,7 +10,7 @@
 | Phase 2 | Node.js/Express → PHP 8.2（分层后端） | ✅ 完成 |
 | Phase 3 | Redis → SQLite（存储层） | ✅ 完成，详见 [SQLITE_MIGRATION.md](SQLITE_MIGRATION.md) |
 | Phase 4 | React 18 (CRA) → Vue 3 (Vite)（前端重写） | ✅ 完成 |
-| 增强 | 管理后台、登录认证、点击统计、运行时设置、开放 API（API Key）、安全加固（CSRF / 限流 / 请求体与 URL 上限 / 安全响应头） | ✅ 完成，详见 [API.md](API.md) |
+| 增强 | 管理后台、登录认证、点击统计、运行时设置、开放 API（API Key）、安全加固（CSRF / 限流 / 请求体与 URL 上限 / 安全响应头）、短链缓存（Memcached，可降级） | ✅ 完成，详见 [API.md](API.md) |
 
 历史分析文档（原项目架构与短码算法分析）见 [PHASE1_ANALYSIS.md](PHASE1_ANALYSIS.md)。
 
@@ -85,6 +85,8 @@
 | （无） | DATABASE_PATH | SQLite 文件路径，默认 `backend/storage/short-url.sqlite3` |
 | （无） | ADMIN_USERNAME / ADMIN_PASSWORD / ADMIN_PASSWORD_HASH / ADMIN_TOKEN_TTL_DAYS | 管理后台凭据 |
 | （无） | DIST_INDEX | `/admin` 返回的 SPA 入口路径 |
+| （无） | CACHE_DRIVER / MEMCACHED_SERVERS / CACHE_TTL / CACHE_NEGATIVE_TTL / MEMCACHED_TIMEOUT_MS | 短链跳转缓存（Memcached，可降级为直连数据库） |
+| （无） | ALLOWED_ORIGINS / CSRF_ALLOW_MISSING_ORIGIN / MAX_BODY_BYTES / CREATE_RATE_LIMIT_MAX / CREATE_RATE_LIMIT_WINDOW / IP_HASH_SECRET / PRIVACY_STORE_REFERER / HSTS_MAX_AGE | 安全加固相关配置 |
 
 `.env` 加载顺序：`backend/.env` → 项目根 `.env`（先找到的生效）；真实环境变量始终优先于 `.env`。
 
@@ -100,15 +102,18 @@
 ## 7. 部署拓扑变化
 
 ```text
-原版： React build ── Express(3001) ── Redis
+原版： React build ── Express(3001) ── Redis（既是唯一存储，也是唯一数据源）
 现版： Nginx ─┬─ 静态：Vue dist/
-              └─ FastCGI ── PHP-FPM ── PDO ── SQLite（单文件）
+              └─ FastCGI ── PHP-FPM ── PDO ── SQLite（单文件，唯一数据源）
+                                  └─ 短链跳转缓存 ── Memcached（可降级，非数据源）
 ```
 
-- Docker Compose：`web`(nginx) + `app`(php-fpm) 双容器，命名卷 `app-data` 持久化数据库；
-- 单容器：nginx + php-fpm 由 supervisord 托管；
+- Docker Compose：`web`(nginx) + `app`(php-fpm) + `memcached` 三容器，命名卷 `app-data` 持久化数据库；
+  memcached 仅内网可达（不暴露端口），不可用时 app 自动降级为直连 SQLite；
+- 单容器：nginx + php-fpm + memcached 由 supervisord 托管；
 - 宝塔：源码部署见 [BAOTA_DEPLOY.md](BAOTA_DEPLOY.md)；开箱即用部署包由
-  `php deploy/build-baota-package.php` 生成（标准 PHP 结构，`public/` 为 Web 运行目录）。
+  `php deploy/build-baota-package.php` 生成（标准 PHP 结构，`public/` 为 Web 运行目录）；
+  未安装 memcached 时缓存自动降级，功能不受影响。
 
 ## 8. 回滚方案
 

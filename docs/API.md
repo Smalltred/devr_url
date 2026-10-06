@@ -272,9 +272,20 @@ GET /api/admin/settings
     "code_min_length": 1,
     "code_random": false,
     "require_login": false,
-    "password_source": "env"
+    "password_source": "env",
+    "cache_ttl": 300,
+    "cache_negative_ttl": 30,
+    "cache": {
+        "driver": "memcached",
+        "available": true,
+        "servers": ["127.0.0.1:11211"],
+        "stats": {"hits": 128, "misses": 12, "items": 42}
+    }
 }
 ```
+
+`cache` 为缓存运行时状态：`driver` 为 `memcached` 或 `null`；`available` 表示缓存当前是否可用
+（false 时所有请求直连数据库，跳转不受影响）；`stats` 为 memcached 服务端累计命中统计。
 
 `password_source`：`env` = 沿用环境变量配置（含默认密码）；`custom` = 已在后台修改过密码。
 
@@ -282,14 +293,16 @@ GET /api/admin/settings
 PUT /api/admin/settings
 Content-Type: application/json
 
-{"code_min_length": 4, "code_random": true, "require_login": false}
+{"code_min_length": 4, "code_random": true, "require_login": false, "cache_ttl": 600, "cache_negative_ttl": 45}
 ```
 
-三个键均可省略（保持原值）。规则：
+各键均可省略（保持原值）。规则：
 
 - `code_min_length`：1-16 的整数，否则 400；新短码不足该长度时自动补齐；
 - `code_random`：布尔。开启后新短码随机生成（要求有效长度 ≥ 3，否则 400，落库前查重）；
-- `require_login`：布尔。开启后 `POST /url`、`POST /api/url` 需登录，未登录返回 401。
+- `require_login`：布尔。开启后 `POST /url`、`POST /api/url` 需登录，未登录返回 401；
+- `cache_ttl`：0-86400 的整数（秒），短链跳转结果的缓存有效期，0 = 不缓存；
+- `cache_negative_ttl`：0-3600 的整数（秒），缓存“短码不存在”的时长（抵御扫描流量），0 = 关闭。
 
 成功（200）返回保存后的设置视图。设置持久化于 SQLite，即时生效，无需重启。
 

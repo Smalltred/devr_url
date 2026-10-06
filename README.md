@@ -24,6 +24,8 @@ Demo 地址 👉 [u.hecady.com](https://u.hecady.com)
   （独立访客 / 来源域名 / 设备分布）、短链编辑与删除、运行时设置、后台改密；
 - **开放 API**：在后台「设置」页创建 API Key 后，外部程序可经 `POST /api/open/shorten`
   程序化创建短链（Bearer / X-API-Key 鉴权，明文 Key 仅创建时展示一次）；
+- **短链缓存**：跳转结果缓存于 Memcached（本机或独立容器），命中时免查数据库；
+  支持缓存有效期与负缓存配置，服务不可用时自动降级为直连数据库，跳转不受影响；
 - **点击统计**：跳转时自动记录点击（UTC 日切分、来源域名、设备类型、IP 匿名哈希估算独立访客），
   原始 IP 与 User-Agent 不入库；
 - **隐私与安全**：登录态 HttpOnly Cookie、登录失败限流（15 分钟 5 次）、创建短链限流（默认 60 次/分钟/IP）、
@@ -37,13 +39,15 @@ Vue 3 前端（src/，Vite 构建，含 /admin 管理面板）
 Nginx（静态资源 /，其余转发）
     ↓ FastCGI
 PHP 8.2 API（backend/，Controller → Service → Repository）
-    ↓ PDO
+    ↓ PDO                      ↑ ↓ 短链跳转缓存（未命中回源，写操作主动失效）
 SQLite（backend/storage/short-url.sqlite3，单文件永久化，WAL 模式）
+                                Memcached（本机或独立容器；不可用时自动降级为直连 SQLite）
 ```
 
 ## 环境依赖
 
-- PHP 8.2+（扩展：pdo_sqlite、json、mbstring）
+- PHP 8.2+（扩展：pdo_sqlite、json、mbstring；可选 memcached 用于短链缓存）
+- Memcached（可选：未安装时缓存自动降级为直连数据库，功能不受影响）
 - Composer 2.x
 - NodeJS 20+（仅构建前端用，Vite 6 要求）
 
@@ -88,6 +92,7 @@ npm run dev
 - **随机短码**：开启后新短码随机生成、不可预测（要求长度 ≥ 3，落库前查重）；
 - **创建短链需要登录**：开启后首页仅管理员可生成短链，未登录访问首页将跳转登录页；
 - **修改密码**：校验当前密码后更新（新密码至少 8 位），哈希优先于环境变量配置，并**撤销全部登录态**（所有端强制重新登录）。
+- **短链缓存**：查看 Memcached 运行状态与命中统计，并配置缓存有效期与负缓存时长（0 = 关闭）。
 
 「设置」页同时提供 **API Key 管理**（创建 / 重置 / 删除），供开放 API 程序化调用，见下文「开放 API」。
 
@@ -131,6 +136,20 @@ composer analyse   # PHPStan level 8 静态分析
 composer lint      # PHP-CS-Fixer 代码风格检查（lint:fix 自动修复）
 ```
 
+### 本地验证短链缓存
+
+未安装 Memcached 时缓存会自动降级（功能不受影响）。需验证缓存链路时：
+
+```bash
+# 1. 启动仓库自带的 memcached 文本协议 mock（无需安装 memcached）
+php tools/mock-memcached.php 11222
+
+# 2. 指定该地址启动后端（PHP 需已启用 memcached 扩展：-d extension=memcached）
+MEMCACHED_SERVERS=127.0.0.1:11222 composer serve
+```
+
+在后台「设置」页可看到驱动状态为运行中，命中统计随跳转次数增长。
+
 ## 部署
 
 ### 方式一：Docker Compose（nginx + php-fpm，推荐）
@@ -141,6 +160,9 @@ docker compose up -d --build
 ```
 
 SQLite 数据文件通过命名卷 `app-data` 持久化（挂载到容器内 `/app/backend/storage`）。
+
+compose 同时启动 `memcached` 服务，app 容器已通过 `MEMCACHED_SERVERS=memcached:11211` 接入；
+设 `CACHE_DRIVER=none` 可关闭缓存。
 
 ### 方式二：单容器（单机）
 
@@ -173,10 +195,13 @@ npm run build
 php deploy/build-baota-package.php    # 生成 baota-package/ 目录（已 gitignore）
 ```
 
-再次打包时会自动生成 `update/` 增量文件夹（相对上一次包仅需替换的文件 + 更新说明清单，
-永不含 SQLite 数据库），日常更新按路径覆盖即可，无需整包重传；跨多个版本时整包重传一次对齐。
+包内含 `update/` 增量文件夹（相对**已部署基线**仅需替换的文件 + 更新说明清单，
+永不含 SQLite 数据库与 `.env`），日常更新按路径覆盖即可，无需整包重传。
+上传完成后再执行一次 `php deploy/build-baota-package.php --mark-deployed` 把基线推进到当前包，
+之后的 `update/` 便只含真正的增量；未标记基线时 `update/` 输出全量文件，跨多版本升级也适用。
 
-上传步骤与自检页（`/check.php`）说明见包内 `部署说明.md`，亦可参考 [deploy/baota/部署说明.md](deploy/baota/部署说明.md)。
+上传步骤与自检页（`/check.php?token=<令牌>`，令牌见包根 `.check-token`）说明见包内 `部署说明.md`，
+亦可参考 [deploy/baota/部署说明.md](deploy/baota/部署说明.md)。
 
 ## 环境变量
 
@@ -203,6 +228,11 @@ php deploy/build-baota-package.php    # 生成 baota-package/ 目录（已 gitig
 | HSTS_MAX_AGE | 0 | HSTS 有效期（秒）；确认全站 HTTPS 后设为 31536000 |
 | CSP_SCRIPT_EXTRA | 空 | CSP 额外放行的脚本来源；留空默认放行 Google Analytics |
 | CSP_CONNECT_EXTRA | 空 | 跨域部署时加入 CSP connect-src 的后端源 |
+| CACHE_DRIVER | memcached | 短链跳转缓存驱动：memcached / none |
+| MEMCACHED_SERVERS | 127.0.0.1:11211 | memcached 服务地址（逗号分隔 host:port） |
+| CACHE_TTL | 300 | 缓存有效期（秒），0 = 不缓存；后台设置页可覆盖 |
+| CACHE_NEGATIVE_TTL | 30 | 负缓存时长（秒），缓存“短码不存在”，0 = 关闭 |
+| MEMCACHED_TIMEOUT_MS | 200 | memcached 连接/读写超时（毫秒） |
 
 > 前端主题（亮/暗）不依赖环境变量：由页头按钮切换，存于浏览器 localStorage（`devr-theme`），
 > 未设置时跟随系统 `prefers-color-scheme`。
