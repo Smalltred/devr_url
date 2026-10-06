@@ -50,7 +50,7 @@
 | `src/App.js`、`src/components/{Header,Search,Entity,Body,Button,Error}.js` | `src/App.vue` + `src/components/{Header,Search,Result,Button,Error}.vue`（Entity 与 Body 合并进 Result） |
 | `src/store.js` + `src/reducers/{entityReducer,errorReducer}.js`（Redux Toolkit） | `src/stores/shortUrl.js`（Pinia） |
 | `src/services/entity.js`（`REACT_APP_API_BASE_URL`） | 同名文件，改读 `VITE_API_BASE_URL`，并扩展管理端 API 封装 |
-| `react-scripts`（webpack，dev 3000 + proxy） | Vite 6（dev 3000，`/url`、`/api` 代理到 3001） |
+| `react-scripts`（webpack，dev 3000 + proxy） | Vite 6（dev 3000，`/url`、`/api` 代理到 3001；`changeOrigin: false` 保留浏览器原始 Host 头，供后端 CSRF 同源判定，避免开发环境写请求 403） |
 | （无对应物，本版新增） | `src/components/ThemeToggle.vue` 亮/暗主题切换 |
 | `qrcode` / `copy-to-clipboard` / `file-saver` / `axios` | 原样保留，功能不变 |
 
