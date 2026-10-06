@@ -39,4 +39,4 @@ yarn-error.log*
 # ZCode local workspace
 /.zcode/
 /.zcodeignore
-deploy/.deployed-manifest.json
+/baota-package.zip

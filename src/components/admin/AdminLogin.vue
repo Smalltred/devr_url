@@ -1,13 +1,19 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import api from '../../services/entity'
 
 const emit = defineEmits(['logged-in'])
 
-const username = ref('admin')
+const username = ref('')
 const password = ref('')
 const error = ref('')
 const submitting = ref(false)
+
+// autofocus 属性只在页面初始加载时生效，登录页是登录态校验后动态挂载的，需显式聚焦
+const usernameInput = ref(null)
+onMounted(() => {
+    usernameInput.value?.focus()
+})
 
 const submit = async () => {
     if (submitting.value || !username.value || !password.value) {
@@ -39,6 +45,7 @@ const submit = async () => {
             <label class="mb-2 block text-sm font-medium text-ink-2" for="admin-username">用户名</label>
             <input
                 id="admin-username"
+                ref="usernameInput"
                 v-model="username"
                 type="text"
                 autocomplete="username"
