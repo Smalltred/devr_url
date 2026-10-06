@@ -6,11 +6,13 @@ namespace Tests\Support;
 
 use App\Foundation\App;
 use App\Http\Request;
+use App\Repositories\ApiKeyRepository;
 use App\Repositories\AuthRepository;
 use App\Repositories\ClickRepository;
 use App\Repositories\SettingsRepository;
 use App\Repositories\UrlRepository;
 use App\Support\Config;
+use Tests\Doubles\InMemoryApiKeyRepository;
 use Tests\Doubles\InMemoryAuthRepository;
 use Tests\Doubles\InMemoryClickRepository;
 use Tests\Doubles\InMemorySettingsRepository;
@@ -26,6 +28,7 @@ final class TestApp
         ?ClickRepository $clicks = null,
         ?AuthRepository $authRepository = null,
         ?SettingsRepository $settings = null,
+        ?ApiKeyRepository $apiKeys = null,
     ): App {
         return App::create(
             self::defaultConfig(),
@@ -34,6 +37,7 @@ final class TestApp
             $clicks ?? new InMemoryClickRepository(),
             $authRepository ?? new InMemoryAuthRepository(),
             $settings ?? new InMemorySettingsRepository(),
+            $apiKeys ?? new InMemoryApiKeyRepository(),
         );
     }
 

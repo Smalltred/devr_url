@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 use App\Controllers\AdminController;
 use App\Controllers\AuthController;
+use App\Controllers\OpenApiController;
 use App\Controllers\UrlController;
 use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
+use App\Services\ApiKeyService;
 use App\Services\AuthService;
 use App\Services\SettingsService;
 
@@ -17,8 +19,9 @@ use App\Services\SettingsService;
  * - POST /url 是原 Node 后端的既有接口，必须保留以兼容原前端与存量调用；POST /api/url 为规范化别名。
  * - GET /admin 必须注册在 GET /{code} 之前，否则会被单段短码兜底路由吞掉。
  * - /api/admin/* 一律经 $guard 施加登录校验（401）；创建短链在开启 require_login 后同样需要登录。
+ * - /api/open/* 经 $openGuard 校验 API Key（Bearer 或 X-API-Key 头），不受 require_login 影响。
  */
-return static function (Router $router, UrlController $url, AuthController $auth, AdminController $admin, AuthService $authService, SettingsService $settings): void {
+return static function (Router $router, UrlController $url, AuthController $auth, AdminController $admin, OpenApiController $open, AuthService $authService, ApiKeyService $apiKeyService, SettingsService $settings): void {
     $publicGuard = static function (callable $handler) use ($authService, $settings): callable {
         return static function (Request $request) use ($authService, $settings, $handler): Response {
             if ($settings->requireLogin()) {
@@ -29,8 +32,18 @@ return static function (Router $router, UrlController $url, AuthController $auth
         };
     };
 
+    $openGuard = static function (callable $handler) use ($apiKeyService): callable {
+        return static function (Request $request) use ($apiKeyService, $handler): Response {
+            $apiKeyService->requireValidKey($request);
+
+            return $handler($request);
+        };
+    };
+
     $router->post('/url', $publicGuard([$url, 'create']));
     $router->post('/api/url', $publicGuard([$url, 'create']));
+
+    $router->post('/api/open/shorten', $openGuard([$open, 'shorten']));
 
     $router->post('/api/auth/login', [$auth, 'login']);
     $router->post('/api/auth/logout', [$auth, 'logout']);
@@ -52,6 +65,11 @@ return static function (Router $router, UrlController $url, AuthController $auth
     $router->get('/api/admin/settings', $guard([$admin, 'settings']));
     $router->put('/api/admin/settings', $guard([$admin, 'updateSettings']));
     $router->post('/api/admin/settings/password', $guard([$admin, 'changePassword']));
+
+    $router->get('/api/admin/keys', $guard([$admin, 'keys']));
+    $router->post('/api/admin/keys', $guard([$admin, 'createKey']));
+    $router->post('/api/admin/keys/{id}/reset', $guard([$admin, 'resetKey']));
+    $router->delete('/api/admin/keys/{id}', $guard([$admin, 'deleteKey']));
 
     $router->get('/admin', [$admin, 'page']);
 

@@ -6,15 +6,18 @@ namespace App\Foundation;
 
 use App\Controllers\AdminController;
 use App\Controllers\AuthController;
+use App\Controllers\OpenApiController;
 use App\Controllers\UrlController;
 use App\Exceptions\ConfigurationException;
 use App\Http\ExceptionHandler;
 use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
+use App\Repositories\ApiKeyRepository;
 use App\Repositories\AuthRepository;
 use App\Repositories\ClickRepository;
 use App\Repositories\SettingsRepository;
+use App\Repositories\SqliteApiKeyRepository;
 use App\Repositories\SqliteAuthRepository;
 use App\Repositories\SqliteClickRepository;
 use App\Repositories\SqliteMetaRepository;
@@ -22,6 +25,7 @@ use App\Repositories\SqliteSettingsRepository;
 use App\Repositories\SqliteUrlRepository;
 use App\Repositories\UrlRepository;
 use App\Services\AdminService;
+use App\Services\ApiKeyService;
 use App\Services\AuthService;
 use App\Services\DatabaseService;
 use App\Services\ClickTracker;
@@ -52,6 +56,7 @@ final class App
         ?ClickRepository $clickRepository = null,
         ?AuthRepository $authRepository = null,
         ?SettingsRepository $settingsRepository = null,
+        ?ApiKeyRepository $apiKeyRepository = null,
     ): self {
         $logger ??= new Logger((string) $config->get('logging.path', sys_get_temp_dir().'/short-url-logs'));
         $database = new DatabaseService($config);
@@ -60,13 +65,16 @@ final class App
         $clickRepository ??= new SqliteClickRepository($database);
         $authRepository ??= new SqliteAuthRepository($database);
         $settingsRepository ??= new SqliteSettingsRepository($database);
+        $apiKeyRepository ??= new SqliteApiKeyRepository($database);
         $settings = new SettingsService($settingsRepository);
+        $apiKeyService = new ApiKeyService($apiKeyRepository, $logger);
 
         $validator = new UrlValidator();
         $ipHasher = new IpHasher(new SqliteMetaRepository($database));
 
+        $shortUrlService = new ShortUrlService($repository, new ShortCodeService(), $validator, $settings);
         $urlController = new UrlController(
-            new ShortUrlService($repository, new ShortCodeService(), $validator, $settings),
+            $shortUrlService,
             new ClickTracker($clickRepository, $ipHasher),
             $logger,
         );
@@ -78,8 +86,11 @@ final class App
         $adminController = new AdminController(
             $adminService,
             $authService,
+            $apiKeyService,
             (string) $config->get('app.dist_index', dirname(__DIR__, 3).'/dist/index.html'),
         );
+
+        $openController = new OpenApiController($shortUrlService);
 
         $router = new Router();
 
@@ -88,7 +99,7 @@ final class App
             throw new ConfigurationException('routes/web.php must return a Closure');
         }
 
-        $register($router, $urlController, $authController, $adminController, $authService, $settings);
+        $register($router, $urlController, $authController, $adminController, $openController, $authService, $apiKeyService, $settings);
 
         return new self($router, new ExceptionHandler($config, $logger));
     }

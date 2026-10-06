@@ -56,6 +56,14 @@ final class DatabaseService
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )',
+        'CREATE TABLE IF NOT EXISTS api_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            key_hash TEXT NOT NULL UNIQUE,
+            prefix TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime(\'now\')),
+            last_used_at TEXT
+        )',
     ];
 
     private ?PDO $pdo = null;

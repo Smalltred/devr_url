@@ -8,6 +8,7 @@ use App\Exceptions\ValidationException;
 use App\Http\Request;
 use App\Http\Response;
 use App\Services\AdminService;
+use App\Services\ApiKeyService;
 use App\Services\AuthService;
 
 /**
@@ -19,6 +20,7 @@ final class AdminController
     public function __construct(
         private readonly AdminService $service,
         private readonly AuthService $auth,
+        private readonly ApiKeyService $apiKeys,
         private readonly string $distIndexPath,
     ) {
     }
@@ -77,6 +79,33 @@ final class AdminController
         }
 
         $this->auth->changePassword($current, $new);
+
+        return Response::json(['ok' => true]);
+    }
+
+    public function keys(): Response
+    {
+        return Response::json(['items' => $this->apiKeys->list()]);
+    }
+
+    public function createKey(Request $request): Response
+    {
+        $body = $request->json();
+        $name = is_array($body) ? ($body['name'] ?? null) : null;
+
+        return Response::json($this->apiKeys->create($name));
+    }
+
+    public function resetKey(Request $request): Response
+    {
+        $id = (int) $request->routeParam('id');
+
+        return Response::json($this->apiKeys->reset($id));
+    }
+
+    public function deleteKey(Request $request): Response
+    {
+        $this->apiKeys->delete((int) $request->routeParam('id'));
 
         return Response::json(['ok' => true]);
     }

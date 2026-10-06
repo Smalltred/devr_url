@@ -33,7 +33,7 @@ final class ExceptionHandler
             $exception instanceof ConflictException => [409, 'Short Code Already Exists', false],
             $exception instanceof UnauthorizedException => [401, $exception->getMessage() !== '' ? $exception->getMessage() : 'Unauthorized', false],
             $exception instanceof ThrottleException => [429, 'Too Many Attempts', false],
-            $exception instanceof ShortCodeNotFoundException => [404, 'Unknown URL', false],
+            $exception instanceof ShortCodeNotFoundException => [404, $exception->getMessage() !== '' ? $exception->getMessage() : 'Unknown URL', false],
             $exception instanceof StorageException => [503, 'Service Unavailable', true],
             $exception instanceof ConfigurationException => [500, 'Internal Server Error', true],
             default => [500, 'Internal Server Error', true],

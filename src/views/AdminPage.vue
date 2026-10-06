@@ -149,13 +149,18 @@ function showNotice(message) {
 
 <template>
     <div class="mx-auto min-h-screen max-w-6xl px-5 sm:px-8">
-        <AdminLogin v-if="authState === 'login'" @logged-in="onLoggedIn" />
+        <!-- 后台各状态进入时播放 page-in 动画（keyframes 实现，避免过渡类滞留导致内容不可见） -->
+        <AdminLogin v-if="authState === 'login'" key="login" class="page-in" @logged-in="onLoggedIn" />
 
-        <div v-else-if="authState === 'checking'" class="flex min-h-screen items-center justify-center">
+        <div
+            v-else-if="authState === 'checking'"
+            key="checking"
+            class="page-in flex min-h-screen items-center justify-center"
+        >
             <div class="glass card animate-pulse text-sm text-ink-2">正在验证登录态…</div>
         </div>
 
-        <div v-else class="py-6 pb-20">
+        <div v-else key="ready" class="page-in py-6 pb-20">
             <!-- 顶栏 -->
             <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
                 <h1 class="text-2xl font-semibold tracking-tight">devr · 管理后台</h1>

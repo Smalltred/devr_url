@@ -93,6 +93,27 @@ const changePassword = async (currentPassword, newPassword) => {
     return res.data
 }
 
+const fetchKeys = async () => {
+    const res = await api.get('/api/admin/keys')
+    return res.data.items || []
+}
+
+// 明文 Key 仅在创建/重置的响应中出现一次
+const createKey = async name => {
+    const res = await api.post('/api/admin/keys', { name })
+    return res.data
+}
+
+const resetKey = async id => {
+    const res = await api.post(`/api/admin/keys/${id}/reset`)
+    return res.data
+}
+
+const deleteKey = async id => {
+    const res = await api.delete(`/api/admin/keys/${id}`)
+    return res.data
+}
+
 export default {
     shortUrl,
     login,
@@ -106,4 +127,8 @@ export default {
     fetchSettings,
     updateSettings,
     changePassword,
+    fetchKeys,
+    createKey,
+    resetKey,
+    deleteKey,
 }
