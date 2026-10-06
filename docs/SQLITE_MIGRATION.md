@@ -15,6 +15,8 @@
 
 ## 2. 数据模型
 
+存储迁移时的核心表（与 Redis 两个 key 对应）：
+
 ```sql
 CREATE TABLE short_urls (
     code       TEXT PRIMARY KEY,          -- 短码（与 Redis map 的 field 等价）
@@ -26,6 +28,18 @@ CREATE TABLE short_url_counter (
     id INTEGER NOT NULL                 -- 单行计数器（与 short-url:code 等价）
 );
 ```
+
+当前版本（v0.3.0，随管理后台功能）的完整表结构，首次连接时自动建库建表：
+
+| 表 | 用途 |
+| --- | --- |
+| `short_urls` | 短码 → 原链接 |
+| `short_url_counter` | 单行自增计数器（短码 ID 源） |
+| `short_url_clicks` | 点击记录（时间、referer、referer_host、device、ip_hash），带 code+time 与 time 两个索引 |
+| `auth_tokens` | 管理端登录态（token 的 sha256 哈希、创建/过期时间戳） |
+| `auth_throttle` | 登录失败限流（IP 匿名哈希 → 失败次数、窗口起点） |
+| `settings` | 运行时设置（短码最小长度、随机码、require_login、自定义密码哈希） |
+| `app_meta` | 内部元数据（IP 哈希的安装级随机盐等） |
 
 短码仍由 ID 经 `ShortCodeService::encode()` 生成，字符表与算法不变，`encode(1) = 'S'` 等向量不变。
 

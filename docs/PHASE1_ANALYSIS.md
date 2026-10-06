@@ -1,5 +1,11 @@
 # Phase 1：原项目分析（Node.js → PHP 8.2 重构前）
 
+> **历史文档**：本文是重构前的原版分析记录（github.com/onee-io/short-url @ commit 7a1352f），
+> 文中"React / Redis / server.js"等描述均为**历史状态**，仅作决策依据留存。
+> 当前版本已完成全部迁移（PHP 8.2 + SQLite + Vue 3 + 管理后台），现状见
+> [README](../README.md) 与 [MIGRATION.md](MIGRATION.md)；方案中"Redis 兼容"相关条款
+> 已被 [SQLITE_MIGRATION.md](SQLITE_MIGRATION.md) 取代。
+
 > 分析对象：github.com/onee-io/short-url @ master（commit 7a1352f）
 > 结论先行：原后端只有 `server.js` 一个文件（67 行），功能为「POST /url 创建短链」+「GET /:code 跳转」，
 > 存储仅用 Redis 的两个 key。PHP 8.2 重构可以做到 **数据 100% 兼容、API 行为 100% 兼容、短码算法逐位一致**。

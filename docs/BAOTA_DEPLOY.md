@@ -142,9 +142,14 @@ curl -sI https://你的域名/SB | head -2
 # 静态页面
 curl -sI https://你的域名/ | head -1
 # HTTP/2 200
+
+# 管理后台会话接口
+curl -s https://你的域名/api/auth/me
+# {"authenticated":false,"require_login":false}
 ```
 
-浏览器打开首页，输入链接生成短链、复制、下载二维码（二维码由前端生成）。
+浏览器打开首页，输入链接生成短链、复制、下载二维码（二维码由前端生成）；
+访问 `/admin` 进入管理面板（默认账号 `admin` / `admin123`，登录后请立即在「设置」页修改密码）。
 
 ## 8. 常见问题
 
@@ -161,5 +166,6 @@ curl -sI https://你的域名/ | head -1
 
 - [ ] `APP_DEBUG=false`（生产必须）
 - [ ] `.env` 权限 640，属主 root:www，不进 Git
+- [ ] **已修改管理后台默认密码**（`/admin` → 设置页改密，或配置 `ADMIN_PASSWORD_HASH`）
 - [ ] `backend/storage/`（含 SQLite 数据库）不在站点根内，不会被公网下载
-- [ ] 建议开启 HTTPS（宝塔 SSL，强制 HTTPS）
+- [ ] 建议开启 HTTPS（宝塔 SSL，强制 HTTPS；`APP_URL` 配置为 https 后登录 Cookie 会附带 Secure）
