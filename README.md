@@ -26,7 +26,8 @@ Demo 地址 👉 [u.hecady.com](https://u.hecady.com)
   程序化创建短链（Bearer / X-API-Key 鉴权，明文 Key 仅创建时展示一次）；
 - **点击统计**：跳转时自动记录点击（UTC 日切分、来源域名、设备类型、IP 匿名哈希估算独立访客），
   原始 IP 与 User-Agent 不入库；
-- **隐私与安全**：登录态 HttpOnly Cookie、登录失败限流（15 分钟 5 次）、密码与 API Key 仅存哈希。
+- **隐私与安全**：登录态 HttpOnly Cookie、登录失败限流（15 分钟 5 次）、创建短链限流（默认 60 次/分钟/IP）、
+  写操作同源校验、请求体与 URL 长度上限、安全响应头（CSP 等）默认开启、密码与 API Key 仅存哈希。
 
 ## 架构
 
@@ -190,9 +191,35 @@ php deploy/build-baota-package.php    # 生成 baota-package/ 目录（已 gitig
 | ADMIN_TOKEN_TTL_DAYS | 7 | 登录态有效期（天） |
 | DIST_INDEX | dist/index.html | `/admin` 返回的 SPA 入口；部署包布局下为 public/index.html |
 | VITE_API_BASE_URL | 空 | 前端 API 地址，构建时读取，留空为同源 |
+| ALLOWED_ORIGINS | 空 | 额外允许的跨站写操作来源（逗号分隔）；留空 = 仅同源 |
+| CSRF_ALLOW_MISSING_ORIGIN | false | 写请求缺少 Origin/Referer 时是否放行（默认拒绝） |
+| IP_HASH_SECRET | 空 | 设置后 IP 匿名哈希改用 HMAC-SHA256，密钥不随库存储（推荐设置） |
+| MAX_BODY_BYTES | 16384 | 请求体上限（字节），超出返回 413 |
+| CREATE_RATE_LIMIT_MAX | 60 | 单 IP 在窗口内允许创建的短链数；0 = 关闭限流 |
+| CREATE_RATE_LIMIT_WINDOW | 60 | 创建限流窗口（秒） |
+| PRIVACY_STORE_REFERER | false | 是否保存完整 Referer；默认仅保存来源域名 |
+| HSTS_MAX_AGE | 0 | HSTS 有效期（秒）；确认全站 HTTPS 后设为 31536000 |
+| CSP_SCRIPT_EXTRA | 空 | CSP 额外放行的脚本来源；留空默认放行 Google Analytics |
+| CSP_CONNECT_EXTRA | 空 | 跨域部署时加入 CSP connect-src 的后端源 |
 
 > 前端主题（亮/暗）不依赖环境变量：由页头按钮切换，存于浏览器 localStorage（`devr-theme`），
 > 未设置时跟随系统 `prefers-color-scheme`。
+
+### 安全默认值说明
+
+- **`IP_HASH_SECRET` 建议设置**（例如 `openssl rand -hex 32` 的输出）。未设置时使用库内随机盐，
+  数据库泄露后仍可离线爆破 IPv4 空间反推 IP；设置后改用 HMAC，密钥不随库存储。
+  注意：变更该值会使历史独立访客数从零重新累计。
+- **创建接口默认限流 60 次/分钟/IP**（公开接口与开放 API 共用）。内网或仅管理员使用时可用
+  `CREATE_RATE_LIMIT_MAX=0` 关闭。
+- **写操作默认要求同源**（校验 Origin/Referer，与 `SameSite=Strict` 双重防护）。跨域部署
+  （`VITE_API_BASE_URL` 指向独立域）时需把后端信任的前端源写入 `ALLOWED_ORIGINS`，否则 403。
+- **完整 Referer 默认不落库**，仅保留来源域名供「来源域名 Top 10」统计；需要原始 Referer 时设置
+  `PRIVACY_STORE_REFERER=true`（注意来源页查询串可能含 token）。
+- **安全响应头默认开启**（CSP / X-Content-Type-Options / X-Frame-Options / Referrer-Policy /
+  Permissions-Policy）。CSP 对 HTML 响应按内容哈希放行内联脚本，前端重新构建后自动匹配。
+- **宝塔部署包自检页需令牌访问**：`/check.php?token=<令牌>`，令牌见包根 `.check-token`；
+  排障完成后请删除 `public/check.php` 与 `.check-token`。
 
 ## 目录结构
 

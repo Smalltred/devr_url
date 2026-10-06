@@ -81,23 +81,38 @@ HTTP/1.1 404 Not Found
 | 302 | 短链跳转 |
 | 400 | 请求参数错误（URL 非法 / 缺字段 / 非法 JSON / 短码不合法） |
 | 401 | 未登录或登录态失效（管理接口）；用户名或密码错误；API Key 缺失或无效（开放接口） |
+| 403 | 跨站来源的写操作被拒（Origin/Referer 校验失败） |
 | 404 | 短码不存在；API Key 不存在（重置/删除） |
 | 405 | HTTP 方法不允许（带 Allow 头） |
 | 409 | 新短码已被占用 |
-| 429 | 登录失败次数过多被限流（15 分钟窗口内失败 5 次） |
+| 413 | 请求体或目标 URL 超出上限（默认请求体 16384 字节、URL 2048 字节） |
+| 429 | 登录失败次数过多被限流（15 分钟窗口内失败 5 次）；创建短链超出频次（默认 60 次/分钟/IP） |
 | 500 | 服务器内部错误 |
 | 503 | 存储不可用（SQLite 打开/读写失败） |
+
+## 安全相关请求约定
+
+| 项目 | 约定 |
+| --- | --- |
+| 写操作来源校验 | 非 GET/HEAD 请求必须来自同源：浏览器会自带 `Origin`（或 `Referer`），其主机须与请求 `Host` 一致。跨域部署时把前端源写入 `ALLOWED_ORIGINS`（逗号分隔）。命中 `403`。 |
+| 非浏览器客户端 | 用 curl/脚本调用写接口时同样要带 `Origin`（或 `Referer`）头，否则默认返回 `403`。若确有无法补头的集成方，可设 `CSRF_ALLOW_MISSING_ORIGIN=true` 放行，但会降低跨站防护强度。**携带 API Key（`Authorization: Bearer` / `X-API-Key`）的请求豁免来源校验**——显式凭据头不构成 CSRF 场景，开放 API 的脚本客户端因此无需补 Origin。 |
+| 请求体上限 | 默认 16384 字节，可用 `MAX_BODY_BYTES` 调整；超出返回 `413`。 |
+| 目标 URL 上限 | 2048 字节（归一化后），超出返回 `413`。 |
+| 创建频次 | 公开接口与开放 API 共用计数，默认 60 次/分钟/IP，超出 `429`；`CREATE_RATE_LIMIT_MAX=0` 关闭。 |
+| 安全响应头 | 所有响应带 CSP、`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy`、`Permissions-Policy`；`HSTS_MAX_AGE>0` 且请求为 HTTPS 时追加 HSTS。 |
+| 来源统计 | 默认只保存来源域名（`referer_host`），不保存完整 Referer（可能含查询串密钥）；`PRIVACY_STORE_REFERER=true` 可改回完整保存。 |
 
 ## curl 示例
 
 ```bash
-# 创建
+# 创建（写操作需带同源 Origin/Referer，浏览器会自动携带）
 curl -s -X POST http://localhost:3001/url \
     -H 'Content-Type: application/json' \
+    -H 'Origin: http://localhost:3001' \
     -d '{"url": "https://github.com/onee-io/short-url"}'
 # => {"url":"https://github.com/onee-io/short-url","code":"SB"}
 
-# 跳转
+# 跳转（GET 无需来源头）
 curl -sI http://localhost:3001/SB
 # => HTTP/1.1 302 Found
 #    Location: https://github.com/onee-io/short-url

@@ -10,7 +10,7 @@
 | Phase 2 | Node.js/Express → PHP 8.2（分层后端） | ✅ 完成 |
 | Phase 3 | Redis → SQLite（存储层） | ✅ 完成，详见 [SQLITE_MIGRATION.md](SQLITE_MIGRATION.md) |
 | Phase 4 | React 18 (CRA) → Vue 3 (Vite)（前端重写） | ✅ 完成 |
-| 增强 | 管理后台、登录认证、点击统计、运行时设置、开放 API（API Key） | ✅ 完成，详见 [API.md](API.md) |
+| 增强 | 管理后台、登录认证、点击统计、运行时设置、开放 API（API Key）、安全加固（CSRF / 限流 / 请求体与 URL 上限 / 安全响应头） | ✅ 完成，详见 [API.md](API.md) |
 
 历史分析文档（原项目架构与短码算法分析）见 [PHASE1_ANALYSIS.md](PHASE1_ANALYSIS.md)。
 
