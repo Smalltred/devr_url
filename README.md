@@ -192,15 +192,15 @@ Nginx 站点配置与逐项说明见 **[docs/BAOTA_DEPLOY.md](docs/BAOTA_DEPLOY.
 
 ```bash
 npm run build
-php deploy/build-baota-package.php    # 生成 baota-package/ 目录（已 gitignore）
+php deploy/build-baota-package.php    # 生成 baota-package/ 与单文件 baota-package.zip（均已 gitignore）
 ```
 
-包内含 `update/` 增量文件夹（相对**已部署基线**仅需替换的文件 + 更新说明清单，
-永不含 SQLite 数据库与 `.env`），日常更新按路径覆盖即可，无需整包重传。
-上传完成后再执行一次 `php deploy/build-baota-package.php --mark-deployed` 把基线推进到当前包，
-之后的 `update/` 便只含真正的增量；未标记基线时 `update/` 输出全量文件，跨多版本升级也适用。
+上传 `baota-package.zip` 到站点目录解压即可完成首次部署或更新：**zip 内不含 `storage/`**
+（数据库与日志由程序在服务器上自动创建），覆盖解压永远不会影响已有短链数据；
+更新时唯一要注意的是 `.env`（zip 内含生产默认配置，覆盖会替换服务器上改过的值，
+请在解压时跳过该文件或先备份）。
 
-上传步骤与自检页（`/check.php?token=<令牌>`，令牌见包根 `.check-token`）说明见包内 `部署说明.md`，
+上传步骤与自检页（`/check.php`，排障完成后请删除）说明见包内 `部署说明.md`，
 亦可参考 [deploy/baota/部署说明.md](deploy/baota/部署说明.md)。
 
 ## 环境变量
@@ -250,8 +250,8 @@ php deploy/build-baota-package.php    # 生成 baota-package/ 目录（已 gitig
   `PRIVACY_STORE_REFERER=true`（注意来源页查询串可能含 token）。
 - **安全响应头默认开启**（CSP / X-Content-Type-Options / X-Frame-Options / Referrer-Policy /
   Permissions-Policy）。CSP 对 HTML 响应按内容哈希放行内联脚本，前端重新构建后自动匹配。
-- **宝塔部署包自检页需令牌访问**：`/check.php?token=<令牌>`，令牌见包根 `.check-token`；
-  排障完成后请删除 `public/check.php` 与 `.check-token`。
+- **宝塔部署包自检页**：`/check.php` 逐项检查 PHP 版本、扩展、storage 可写与路由转发，
+  探针短链用完即清理；排障完成后请删除 `public/check.php`。
 
 ## 目录结构
 
@@ -273,7 +273,7 @@ short-url/
 ├── deploy/
 │   ├── nginx/             # 通用(宝塔) / docker 单容器 / compose 三种 Nginx 配置
 │   ├── baota/             # 开箱即用部署包的伪静态、public 骨架与部署说明
-│   ├── build-baota-package.php  # 打包脚本（生成 baota-package/，含 update/ 增量包）
+│   ├── build-baota-package.php  # 打包脚本（生成 baota-package/ 与单文件 baota-package.zip）
 │   └── supervisord.conf   # 单容器进程托管
 ├── tools/
 │   └── generate-icons.mjs # 站点图标生成脚本（node tools/generate-icons.mjs 重制 favicon.ico / logo100.png）
