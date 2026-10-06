@@ -32,7 +32,7 @@ const submit = async () => {
     <div class="flex min-h-screen items-center justify-center px-5">
         <form class="glass-strong card w-full max-w-md p-8" @submit.prevent="submit">
             <div class="mb-8 text-center">
-                <h1 class="text-2xl font-semibold tracking-tight">devr · 管理后台</h1>
+                <h1 class="text-2xl font-semibold tracking-tight">Devr · 管理后台</h1>
                 <p class="mt-2 text-sm text-ink-2">请输入管理员账号登录</p>
             </div>
 

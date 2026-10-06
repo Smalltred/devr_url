@@ -29,6 +29,12 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progre
 FROM php:8.2-fpm-alpine AS php-base
 RUN docker-php-ext-install pdo_sqlite
 COPY --from=php /app /app/backend
+# 数据与日志目录必须在镜像内预建并交给 www-data：php-fpm worker 以 www-data 运行，
+# 若 /app/backend 由 root 拥有且 storage 不存在，DatabaseService 无法自行建目录（503）。
+# 命名卷挂载到该路径时会继承这里的属主，重建容器不丢数据。
+RUN mkdir -p /app/backend/storage/logs \
+    && chown -R www-data:www-data /app/backend/storage \
+    && chmod 775 /app/backend/storage /app/backend/storage/logs
 ENV APP_ENV=production \
     APP_DEBUG=false
 WORKDIR /app/backend

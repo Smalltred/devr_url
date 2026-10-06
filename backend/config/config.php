@@ -5,6 +5,7 @@ declare(strict_types=1);
 use function App\Support\env;
 use function App\Support\env_bool;
 use function App\Support\env_int;
+use function App\Support\env_list;
 
 /**
  * 全项目唯一的配置定义：所有环境变量在此统一读取，业务代码通过注入的 Config 使用。
@@ -24,6 +25,37 @@ return [
         'dist_index' => env('DIST_INDEX', is_file($backendPath.'/../dist/index.html')
             ? $backendPath.'/../dist/index.html'
             : $backendPath.'/public/index.html'),
+        // HTTP 响应体上限（字节）：超出直接 413，避免超大请求占用内存
+        'max_body_bytes' => env_int('MAX_BODY_BYTES', 16384),
+    ],
+    'security' => [
+        // 允许的跨站写操作来源（逗号分隔，如 https://u.example.com,https://www.example.com）
+        // 留空 = 仅接受同源请求；同源判定依据 Host 头，反向代理场景无需额外配置
+        'allowed_origins' => env_list('ALLOWED_ORIGINS'),
+        // 写操作缺少 Origin/Referer 时是否放行。默认 false（拒绝）：浏览器发起的跨站写操作
+        // 必然带 Origin/Referer，缺失通常意味着非浏览器客户端。
+        // 确有仅用 curl 的集成方且无法补头发送时，才设为 true。
+        'csrf_allow_missing_origin' => env_bool('CSRF_ALLOW_MISSING_ORIGIN', false),
+        // IP 匿名哈希密钥（推荐设置）：设置后改用 HMAC，密钥不随数据库存储，
+        // 库泄露也无法离线爆破反推 IP。留空则沿用库内随机盐（兼容存量部署）。
+        'ip_hash_secret' => env('IP_HASH_SECRET', ''),
+        // 统计脚本域名（CSP script-src 放行；index.html 内置 Google Analytics）
+        'csp_script_extra' => env_list('CSP_SCRIPT_EXTRA') ?: ['https://www.googletagmanager.com'],
+        // 跨域部署时把后端源加入 CSP connect-src（如 https://api.example.com）
+        'csp_connect_extra' => env_list('CSP_CONNECT_EXTRA'),
+        // HSTS 有效期（秒）；0 = 不下发。确认全站 HTTPS 后再设为 31536000
+        'hsts_max_age' => env_int('HSTS_MAX_AGE', 0),
+    ],
+    'ratelimit' => [
+        // 创建短链限流：单 IP 在窗口内允许的请求数；0 = 关闭
+        'create_max' => env_int('CREATE_RATE_LIMIT_MAX', 60),
+        'create_window_seconds' => env_int('CREATE_RATE_LIMIT_WINDOW', 60),
+    ],
+    'privacy' => [
+        // 是否保存完整 Referer（含路径与查询串）。默认关闭：
+        // 来源页可能把 token/一次性链接带进查询串，长期留存属隐私风险。
+        // 关闭时仅保存来源域名（referer_host），后台统计不受影响。
+        'store_full_referer' => env_bool('PRIVACY_STORE_REFERER', false),
     ],
     'database' => [
         // SQLite 数据库文件；目录不存在时自动创建，文件随请求惰性打开

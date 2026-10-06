@@ -69,6 +69,14 @@ final class Request
         return $this->decodedBody;
     }
 
+    /**
+     * 原始请求体（体积校验用；业务代码请用 json()）。
+     */
+    public function rawBody(): string
+    {
+        return $this->rawBody;
+    }
+
     public function routeParam(string $name): string
     {
         return isset($this->params[$name]) ? (string) $this->params[$name] : '';
@@ -115,10 +123,22 @@ final class Request
     }
 
     /**
+     * 复制请求并替换路由参数。
+     * remoteAddress 必须一并传递：路由命中后处理器拿到的都是本方法返回的副本，
+     * 丢失它会让登录限流按空 IP 归并、点击统计丢失独立访客。
+     *
      * @param array<string, string> $params
      */
     public function withParams(array $params): self
     {
-        return new self($this->method, $this->path, $this->rawBody, $this->query, $this->headers, $params);
+        return new self(
+            $this->method,
+            $this->path,
+            $this->rawBody,
+            $this->query,
+            $this->headers,
+            $params,
+            $this->remoteAddress,
+        );
     }
 }

@@ -6,6 +6,7 @@ namespace App\Controllers;
 
 use App\Http\Request;
 use App\Http\Response;
+use App\Security\SecurityHeaders;
 use App\Services\AuthService;
 use App\Services\SettingsService;
 
@@ -27,14 +28,17 @@ final class AuthController
         $username = is_array($body) ? ($body['username'] ?? null) : null;
         $password = is_array($body) ? ($body['password'] ?? null) : null;
 
-        $cookie = $this->auth->login($username, $password, $request->clientIp());
+        $secure = SecurityHeaders::isSecureRequest($request);
+        $cookie = $this->auth->login($username, $password, $request->clientIp(), $secure);
 
         return Response::json(['ok' => true], 200, ['set-cookie' => $cookie]);
     }
 
     public function logout(Request $request): Response
     {
-        return Response::json(['ok' => true], 200, ['set-cookie' => $this->auth->logout($request)]);
+        $cookie = $this->auth->logout($request, SecurityHeaders::isSecureRequest($request));
+
+        return Response::json(['ok' => true], 200, ['set-cookie' => $cookie]);
     }
 
     public function me(Request $request): Response

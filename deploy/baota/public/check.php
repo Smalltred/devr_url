@@ -3,20 +3,44 @@
 declare(strict_types=1);
 
 /**
- * 宝塔部署包 · 环境自检（public/check.php，访问 /check.php）
- * 检查三类问题：
+ * 宝塔部署包 · 环境自检（public/check.php，访问 /check.php?token=xxxx）
+ *
+ * 安全检查（防止把部署细节暴露给公网）：
+ *   - 必须携带访问令牌：令牌由打包脚本随机生成，存放于包根 .check-token（Web 根之外），
+ *     通过 hash_equals 常量时间比较；未生成令牌文件时本页直接拒绝运行；
+ *   - 页面不显示任何文件路径、数据库路径或配置值，只显示通过/失败与修复提示；
+ *   - 全链路实测与数据写入必须显式带 run=1，且写入的探针短链在本次请求内清理干净。
+ *
+ * 检查内容：
  *   A. 服务器端：PHP 版本、扩展（pdo_sqlite/mbstring/json）、storage 可写、数据库可打开；
- *   B. 路由转发（伪静态）：用 fetch 实测 POST /url 与 GET /{code} 是否能到达 PHP；
- *   C. 后端全链路内部实测：在服务器内部完整执行一次"创建短链 → 跳转"，任何异常都会
- *      显示真实错误信息（临时强制 debug，仅作用于本次自检，不影响正式请求）。
- * 页面本身是真实 .php 文件，无需伪静态即可打开；若本页也无法打开，说明站点未启用 PHP。
- * 排障完成后可删除本文件。C 项自测会写入一条示例短链。
+ *   B. 路由转发（伪静态）：POST /url 是否能到达 PHP（用非法参数探测，不写数据）；
+ *   C. 后端全链路内部实测（仅 run=1）：创建短链 → 跳转 → 清理。
+ *
+ * 排障完成后请删除本文件。
  */
 
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
 
 $baseDir = dirname(__DIR__);
+$tokenFile = $baseDir.'/.check-token';
+
+// ---------- 0. 访问令牌校验 ----------
+$expected = is_file($tokenFile) ? trim((string) file_get_contents($tokenFile)) : '';
+$provided = isset($_GET['token']) && is_string($_GET['token']) ? trim($_GET['token']) : '';
+
+if ($expected === '' || $provided === '' || !hash_equals($expected, $provided)) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "Forbidden\n\n";
+    echo "本页需要在 URL 上携带访问令牌：/check.php?token=<令牌>\n";
+    echo $expected === ''
+        ? "令牌文件 .check-token 不存在：请重新执行 php deploy/build-baota-package.php 生成部署包。\n"
+        : "令牌已生成，见部署包根目录 .check-token（或运行部署脚本后的输出）。\n";
+    exit;
+}
+
+$runFullChain = isset($_GET['run']) && $_GET['run'] === '1';
 
 $checks = [];
 
@@ -59,6 +83,7 @@ $add('storage/ 可写（SQLite 与日志）', $storageOk ? '可写' : '不可写
 
 $dbMessage = '未检测';
 $dbOk = false;
+$database = null;
 if ($autoloadOk && $envOk && $storageOk) {
     try {
         require $baseDir.'/vendor/autoload.php';
@@ -71,17 +96,18 @@ if ($autoloadOk && $envOk && $storageOk) {
         $dbOk = true;
         $dbMessage = '连接正常';
     } catch (\Throwable $exception) {
-        $dbMessage = '失败：'.$exception::class.' '.$exception->getMessage();
+        // 只回显异常类型，不回显路径等细节
+        $dbMessage = '失败：'.$exception::class;
     }
 } else {
     $dbMessage = '因前置检查未通过而跳过';
 }
-$add('SQLite 数据库', $dbMessage, $dbOk, '确认 .env 的 DATABASE_PATH 指向可写目录');
+$add('SQLite 数据库', $dbMessage, $dbOk, '确认 .env 的 DATABASE_PATH 指向可写目录，且 storage/ 权限正确');
 
-// ---------- C. 后端全链路内部实测 ----------
-$internalMessage = '未检测（前置检查未通过）';
+// ---------- C. 后端全链路内部实测（仅 run=1，且写入后立即清理） ----------
+$internalMessage = $runFullChain ? '未检测（前置检查未通过）' : '未执行（加 &run=1 可运行，会写入并清理一条探针短链）';
 $internalOk = false;
-if ($autoloadOk && $envOk) {
+if ($runFullChain && $autoloadOk && $envOk) {
     try {
         require $baseDir.'/vendor/autoload.php';
         App\Support\Env::load($baseDir.'/.env');
@@ -91,7 +117,9 @@ if ($autoloadOk && $envOk) {
         $app = App\Foundation\App::create(new App\Support\Config($configArray));
 
         $probeUrl = 'https://check.example.com/probe-'.bin2hex(random_bytes(4));
-        $created = $app->handle(new App\Http\Request('POST', '/url', (string) json_encode(['url' => $probeUrl])));
+        // 与浏览器同源：带上 Host 与同源 Origin，否则会被 CSRF 来源校验拒绝
+        $headers = ['host' => (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'), 'origin' => 'http://'.(string) ($_SERVER['HTTP_HOST'] ?? 'localhost')];
+        $created = $app->handle(new App\Http\Request('POST', '/url', (string) json_encode(['url' => $probeUrl]), [], $headers));
         $payload = $created->decodedJson();
         $code = is_array($payload) ? (string) ($payload['code'] ?? '') : '';
 
@@ -100,11 +128,20 @@ if ($autoloadOk && $envOk) {
                 .substr((string) json_encode($payload, JSON_UNESCAPED_UNICODE), 0, 300);
         } else {
             $redirect = $app->handle(new App\Http\Request('GET', '/'.$code, ''));
+            // 探针数据不进业务库：本次请求内删掉（连同点击记录）
+            if ($database !== null) {
+                $database->execute(static function (PDO $pdo) use ($code): void {
+                    $delete = $pdo->prepare('DELETE FROM short_urls WHERE code = :code');
+                    $delete->execute([':code' => $code]);
+                    $clicks = $pdo->prepare('DELETE FROM short_url_clicks WHERE code = :code');
+                    $clicks->execute([':code' => $code]);
+                });
+            }
             if ($redirect->status() === 302) {
                 $internalOk = true;
-                $internalMessage = '创建 + 跳转全链路正常（示例短码 '.$code.' 已写入数据库，可在管理后台删除）';
+                $internalMessage = '创建 + 跳转全链路正常（探针短链已清理，未残留数据）';
             } else {
-                $internalMessage = '跳转失败：HTTP '.$redirect->status();
+                $internalMessage = '跳转失败：HTTP '.$redirect->status().'（探针短链已清理）';
             }
         }
     } catch (\Throwable $exception) {
@@ -133,6 +170,7 @@ if ($autoloadOk && $envOk) {
 </head>
 <body>
 <h1>short-url 环境自检</h1>
+<p class="hint">本页含部署环境信息，已启用令牌访问。排障完成后请删除 <code>public/check.php</code>，并撤销令牌文件。</p>
 
 <h2>A. 服务器环境</h2>
 <table>
@@ -153,7 +191,7 @@ if ($autoloadOk && $envOk) {
     <?= htmlspecialchars($internalMessage) ?>
 </div>
 <p class="hint">此项在服务器内部直接执行"创建短链 → 跳转"完整链路，不经过 Nginx；失败时会显示真实异常。
-真实请求仍返回 500 而这里通过时，请查看 <code>storage/logs/error.log</code>。
+探针短链会在本次请求内自动删除。真实请求仍返回 500 而这里通过时，请查看 <code>storage/logs/error.log</code>。
 
 <h2>B. 路由转发（伪静态）实测</h2>
 <div id="route-result" class="card">检测中…</div>
@@ -163,12 +201,11 @@ if ($autoloadOk && $envOk) {
 （Apache 环境检查 <code>.htaccess</code> 是否位于 public/ 目录内。）</p>
 
 <script>
+// 仅探测路由连通性，不写入任何数据
 async function checkRoute() {
     const box = document.getElementById('route-result');
     const items = [];
-    let code = '';
 
-    // 1) 非法参数探测：应由 PHP 返回 400 JSON
     try {
         const post = await fetch('/url', {
             method: 'POST',
@@ -177,55 +214,26 @@ async function checkRoute() {
         });
         const postText = await post.text();
         const postOk = post.status === 400 && postText.includes('Incorrect URL format');
-        items.push({name: 'POST /url（创建接口连通性）', critical: true, ok: postOk, detail: post.status + ' ' + postText.slice(0, 60)});
+        items.push({name: 'POST /url（创建接口连通性）', ok: postOk, detail: post.status + ' ' + postText.slice(0, 60)});
     } catch (e) {
-        items.push({name: 'POST /url（创建接口连通性）', critical: true, ok: false, detail: String(e)});
+        items.push({name: 'POST /url（创建接口连通性）', ok: false, detail: String(e)});
     }
 
-    // 2) 真实创建一条短链
     try {
-        const create = await fetch('/url', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({url: 'https://check.example.com/verify-' + Date.now()}),
-        });
-        const createText = await create.text();
-        let payload = {};
-        try { payload = JSON.parse(createText); } catch (e) {}
-        code = typeof payload.code === 'string' ? payload.code : '';
-        items.push({name: 'POST /url（真实创建短链）', critical: true, ok: create.status === 200 && code !== '', detail: create.status + ' ' + createText.slice(0, 60)});
+        const probe = await fetch('/route-check-' + Math.random().toString(36).slice(2));
+        const probeText = await probe.text();
+        const probeOk = probe.status === 404 && probeText.includes('Unknown URL');
+        items.push({name: 'GET /随机路径（辅助探测）', ok: probeOk,
+            detail: probe.status + ' ' + (probeText.includes('Unknown URL') ? 'JSON 404（已到 PHP）' : 'HTML 404（Web 服务器/防火墙拦截）')});
     } catch (e) {
-        items.push({name: 'POST /url（真实创建短链）', critical: true, ok: false, detail: String(e)});
+        items.push({name: 'GET /随机路径（辅助探测）', ok: false, detail: String(e)});
     }
 
-    // 3) 访问真实短链：应发生 302 跳转（redirect:'manual' 下体现为 opaqueredirect）
-    if (code) {
-        try {
-            const r = await fetch('/' + code, {redirect: 'manual'});
-            const redirectOk = r.status === 302 || r.type === 'opaqueredirect';
-            items.push({name: 'GET /' + code + '（真实短链跳转）', critical: true, ok: redirectOk, detail: 'status=' + r.status + ' type=' + r.type});
-        } catch (e) {
-            items.push({name: 'GET /' + code + '（真实短链跳转）', critical: true, ok: false, detail: String(e)});
-        }
+    const allOk = items.every(function (i) { return i.ok; });
+    box.className = 'card ' + (allOk ? 'pass' : 'fail');
 
-        // 4) 辅助诊断：随机路径探测（部分防火墙/防扫描规则会拦截无扩展名 GET，不影响真实短链）
-        try {
-            const probe = await fetch('/route-check-' + Math.random().toString(36).slice(2));
-            const probeText = await probe.text();
-            const probeOk = probe.status === 404 && probeText.includes('Unknown URL');
-            items.push({name: 'GET /随机路径（辅助探测）', critical: false, ok: probeOk,
-                detail: probe.status + ' ' + (probeText.includes('Unknown URL') ? 'JSON 404（已到 PHP）' : 'HTML 404（Web 服务器/防火墙拦截）')});
-        } catch (e) {
-            items.push({name: 'GET /随机路径（辅助探测）', critical: false, ok: false, detail: String(e)});
-        }
-    }
-
-    const criticalOk = items.filter(function (i) { return i.critical; }).every(function (i) { return i.ok; });
-    const probe = items.filter(function (i) { return !i.critical; })[0];
-    box.className = 'card ' + (criticalOk ? 'pass' : 'fail');
-
-    let html = criticalOk
-        ? '<strong class="ok">创建与跳转功能正常</strong>，实际使用不受影响。'
+    let html = allOk
+        ? '<strong class="ok">路由转发正常</strong>。'
         : '<strong class="bad">未通过</strong>：';
     html += '<ul style="margin:8px 0 0 18px;padding:0">';
     items.forEach(function (i) {
@@ -233,15 +241,9 @@ async function checkRoute() {
             + ' <span class="hint">（' + String(i.detail).replace(/</g, '&lt;') + '）</span></li>';
     });
     html += '</ul>';
-    if (!criticalOk) {
-        const postItem = items[0], jumpItem = items[2];
-        if (postItem && postItem.ok && jumpItem && !jumpItem.ok) {
-            html += '<p style="margin:8px 0 0">创建正常但跳转被拦：确认伪静态已保存（内容应与 <code>nginx-rewrite.conf</code> 一致），并检查宝塔防火墙/防扫描规则是否拦截了无扩展名路径。</p>';
-        } else {
-            html += '<p style="margin:8px 0 0">修复：宝塔 → 网站 → 设置 → 伪静态 → 粘贴 <code>nginx-rewrite.conf</code> 内容并保存。</p>';
-        }
-    } else if (probe && !probe.ok) {
-        html += '<p style="margin:8px 0 0" class="hint">随机路径探测被拦截通常来自宝塔防火墙/防扫描规则，不影响真实短链的创建与跳转。</p>';
+    if (!allOk) {
+        html += '<p style="margin:8px 0 0">修复：宝塔 → 网站 → 设置 → 伪静态 → 粘贴 <code>nginx-rewrite.conf</code> 内容并保存；'
+            + '随机路径探测被防火墙/防扫描规则拦截通常不影响真实短链。</p>';
     }
     box.innerHTML = html;
 }

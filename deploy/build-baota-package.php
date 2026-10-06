@@ -99,6 +99,10 @@ foreach (['nginx-rewrite.conf', '部署说明.md'] as $name) {
     copy($templateDir.'/'.$name, $packageDir.'/'.$name);
 }
 
+// check.php 自检页需要访问令牌（Web 根之外存放，避免被公网扫到部署细节）
+$checkToken = bin2hex(random_bytes(16));
+file_put_contents($packageDir.'/.check-token', $checkToken."\n");
+
 // ---------- 7) 直接初始化数据库（建全全部表结构，首个请求即可写入） ----------
 require $packageDir.'/vendor/autoload.php';
 App\Support\Env::load($packageDir.'/.env');
@@ -167,13 +171,15 @@ foreach ($deleted as $relPath) {
 $instruction .= "\n注意：\n"
     ."  1. update/ 不会包含 storage/short-url.sqlite3（服务器数据请勿被包内空库覆盖）；\n"
     ."  2. 若服务器版本落后多个版本，建议改为整包重传一次以对齐基线；\n"
-    ."  3. 上传完成后可访问 /check.php 验证。\n";
+    ."  3. 上传完成后可访问 /check.php?token=<令牌> 验证（令牌见包根 .check-token）；\n"
+    ."  4. 排障完成后请删除服务器上的 public/check.php 与 .check-token。\n";
 file_put_contents($updateDir.'/更新说明.txt', $instruction);
 
 file_put_contents($manifestFile, (string) json_encode($current, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
 $changeCount = count(array_merge($added, $modified));
 echo "增量更新：$changeCount 个文件需要替换（见 baota-package/update/）\n";
+echo "自检页令牌（.check-token，用于 /check.php?token=...）：$checkToken\n";
 echo "部署包已生成：$packageDir\n";
 
 /**

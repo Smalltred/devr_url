@@ -6,7 +6,9 @@ namespace App\Http;
 
 use App\Exceptions\ConfigurationException;
 use App\Exceptions\ConflictException;
+use App\Exceptions\CsrfException;
 use App\Exceptions\InvalidUrlException;
+use App\Exceptions\PayloadTooLargeException;
 use App\Exceptions\ShortCodeNotFoundException;
 use App\Exceptions\StorageException;
 use App\Exceptions\ThrottleException;
@@ -30,10 +32,12 @@ final class ExceptionHandler
         [$status, $publicMessage, $isServerError] = match (true) {
             $exception instanceof InvalidUrlException => [400, 'Incorrect URL format', false],
             $exception instanceof ValidationException => [400, $exception->getMessage() !== '' ? $exception->getMessage() : 'Validation Failed', false],
+            $exception instanceof CsrfException => [403, 'Cross-site request rejected', false],
             $exception instanceof ConflictException => [409, 'Short Code Already Exists', false],
             $exception instanceof UnauthorizedException => [401, $exception->getMessage() !== '' ? $exception->getMessage() : 'Unauthorized', false],
             $exception instanceof ThrottleException => [429, 'Too Many Attempts', false],
             $exception instanceof ShortCodeNotFoundException => [404, $exception->getMessage() !== '' ? $exception->getMessage() : 'Unknown URL', false],
+            $exception instanceof PayloadTooLargeException => [413, 'Payload Too Large', false],
             $exception instanceof StorageException => [503, 'Service Unavailable', true],
             $exception instanceof ConfigurationException => [500, 'Internal Server Error', true],
             default => [500, 'Internal Server Error', true],

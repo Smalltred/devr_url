@@ -9,6 +9,8 @@ use App\Controllers\UrlController;
 use App\Http\Request;
 use App\Http\Response;
 use App\Http\Router;
+use App\Security\CsrfGuard;
+use App\Security\RequestRateLimiter;
 use App\Services\ApiKeyService;
 use App\Services\AuthService;
 use App\Services\SettingsService;
@@ -20,21 +22,26 @@ use App\Services\SettingsService;
  * - GET /admin 必须注册在 GET /{code} 之前，否则会被单段短码兜底路由吞掉。
  * - /api/admin/* 一律经 $guard 施加登录校验（401）；创建短链在开启 require_login 后同样需要登录。
  * - /api/open/* 经 $openGuard 校验 API Key（Bearer 或 X-API-Key 头），不受 require_login 影响。
+ * - 跨站来源校验（CSRF）与请求体体积上限（413）由 App::handle() 统一施加，早于任何处理器。
+ * - 创建类接口额外经 $rateLimiter 限流（429），避免被批量刷短码。
  */
-return static function (Router $router, UrlController $url, AuthController $auth, AdminController $admin, OpenApiController $open, AuthService $authService, ApiKeyService $apiKeyService, SettingsService $settings): void {
-    $publicGuard = static function (callable $handler) use ($authService, $settings): callable {
-        return static function (Request $request) use ($authService, $settings, $handler): Response {
+return static function (Router $router, UrlController $url, AuthController $auth, AdminController $admin, OpenApiController $open, AuthService $authService, ApiKeyService $apiKeyService, SettingsService $settings, CsrfGuard $csrfGuard, RequestRateLimiter $rateLimiter): void {
+    $publicGuard = static function (callable $handler) use ($authService, $settings, $rateLimiter): callable {
+        return static function (Request $request) use ($authService, $settings, $rateLimiter, $handler): Response {
             if ($settings->requireLogin()) {
                 $authService->requireAuth($request);
             }
+
+            $rateLimiter->assertAllowed($request, RequestRateLimiter::SCOPE_CREATE);
 
             return $handler($request);
         };
     };
 
-    $openGuard = static function (callable $handler) use ($apiKeyService): callable {
-        return static function (Request $request) use ($apiKeyService, $handler): Response {
+    $openGuard = static function (callable $handler) use ($apiKeyService, $rateLimiter): callable {
+        return static function (Request $request) use ($apiKeyService, $rateLimiter, $handler): Response {
             $apiKeyService->requireValidKey($request);
+            $rateLimiter->assertAllowed($request, RequestRateLimiter::SCOPE_CREATE);
 
             return $handler($request);
         };

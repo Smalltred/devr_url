@@ -48,6 +48,13 @@ final class DatabaseService
             fails INTEGER NOT NULL,
             window_start INTEGER NOT NULL
         )',
+        'CREATE TABLE IF NOT EXISTS request_throttle (
+            scope TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            window_start INTEGER NOT NULL,
+            hits INTEGER NOT NULL,
+            PRIMARY KEY (scope, subject)
+        )',
         'CREATE TABLE IF NOT EXISTS app_meta (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL

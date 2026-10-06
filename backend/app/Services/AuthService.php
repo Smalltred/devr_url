@@ -44,8 +44,9 @@ final class AuthService
      *
      * @param mixed $username 请求体中的用户名（未校验类型）
      * @param mixed $password 请求体中的密码（未校验类型）
+     * @param bool  $secure   当前请求是否经 HTTPS（部署层 TLS 终结时由 X-Forwarded-Proto 判定）
      */
-    public function login(mixed $username, mixed $password, string $ip): string
+    public function login(mixed $username, mixed $password, string $ip, bool $secure = false): string
     {
         $ipHash = $this->ipHasher->hash($ip) ?? 'anonymous';
         $this->assertNotThrottled($ipHash);
@@ -65,17 +66,21 @@ final class AuthService
         $this->repository->createToken(hash('sha256', $token), $now, $now + $ttl);
         $this->repository->purgeExpiredTokens($now);
 
-        return $this->authCookie($token, $ttl);
+        return $this->authCookie($token, $ttl, $secure);
     }
 
-    public function logout(Request $request): string
+    public function logout(Request $request, bool $secure = false): string
     {
         $token = $request->cookie(self::COOKIE_NAME);
         if ($token !== null) {
             $this->repository->deleteToken(hash('sha256', $token));
         }
 
-        return self::COOKIE_NAME.'=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0';
+        return sprintf(
+            '%s=; Path=/; HttpOnly; SameSite=Strict%s; Max-Age=0',
+            self::COOKIE_NAME,
+            $secure ? '; Secure' : '',
+        );
     }
 
     public function isAuthenticated(Request $request): bool
@@ -99,13 +104,21 @@ final class AuthService
     }
 
     /**
-     * 登录成功后的 Set-Cookie 值。APP_URL 为 https 时附带 Secure 属性。
+     * 登录成功后的 Set-Cookie 值。
+     * Secure 依据当前请求的实际协议（含反代 X-Forwarded-Proto）或 APP_URL 为 https 时附加，
+     * 避免 HTTPS 站点在未配置 APP_URL 时下发可被明文回传的会话 Cookie。
      */
-    public function authCookie(string $token, int $ttl): string
+    public function authCookie(string $token, int $ttl, bool $secure = false): string
     {
-        $secure = str_starts_with(strtolower((string) $this->config->get('app.url', '')), 'https://') ? '; Secure' : '';
+        $https = $secure || str_starts_with(strtolower((string) $this->config->get('app.url', '')), 'https://');
 
-        return sprintf('%s=%s; Path=/; HttpOnly; SameSite=Strict%s; Max-Age=%d', self::COOKIE_NAME, $token, $secure, $ttl);
+        return sprintf(
+            '%s=%s; Path=/; HttpOnly; SameSite=Strict%s; Max-Age=%d',
+            self::COOKIE_NAME,
+            $token,
+            $https ? '; Secure' : '',
+            $ttl,
+        );
     }
 
     private function assertNotThrottled(string $ipHash): void

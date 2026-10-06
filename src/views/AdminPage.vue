@@ -163,7 +163,7 @@ function showNotice(message) {
         <div v-else key="ready" class="page-in py-6 pb-20">
             <!-- 顶栏 -->
             <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
-                <h1 class="text-2xl font-semibold tracking-tight">devr · 管理后台</h1>
+                <h1 class="text-2xl font-semibold tracking-tight">Devr · 管理后台</h1>
                 <div class="flex items-center gap-2">
                     <ThemeToggle />
                     <a href="/" class="btn btn-ghost btn-sm">← 返回首页</a>

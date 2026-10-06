@@ -23,5 +23,8 @@
         <testsuite name="Compat">
             <directory>tests/Compat</directory>
         </testsuite>
+        <testsuite name="Security">
+            <directory>tests/Security</directory>
+        </testsuite>
     </testsuites>
 </phpunit>

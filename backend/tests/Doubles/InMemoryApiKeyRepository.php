@@ -107,6 +107,24 @@ final class InMemoryApiKeyRepository implements ApiKeyRepository
     }
 
     /**
+     * 预置一条 Key（传入明文，内部按生产同口径存 sha256）。
+     */
+    public function seed(string $plainKey, string $name = 'seeded'): void
+    {
+        $this->create($name, hash('sha256', $plainKey), substr($plainKey, 0, 12));
+    }
+
+    /**
+     * 原始行（含 key_hash），供断言“库存哈希而非明文”。
+     *
+     * @return list<array{id: int, name: string, key_hash: string, prefix: string, created_at: string, last_used_at: ?string}>
+     */
+    public function rawRows(): array
+    {
+        return $this->rows;
+    }
+
+    /**
      * @param array{id: int, name: string, key_hash: string, prefix: string, created_at: string, last_used_at: ?string} $row
      *
      * @return array{id: int, name: string, prefix: string, created_at: string, last_used_at: ?string}

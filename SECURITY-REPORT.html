@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Devr 短链接 · 安全审计可视化报告</title>
+<style>
+:root {
+  --bg: #f5f7fb;
+  --bg-elevated: #eef2f7;
+  --surface: rgba(255,255,255,0.72);
+  --surface-solid: #ffffff;
+  --text: #172033;
+  --text-2: #5f6b7a;
+  --text-3: #8b95a3;
+  --accent: #4f8ff7;
+  --accent-hover: #3b82f6;
+  --accent-soft: rgba(79,143,247,0.12);
+  --success: #34a853;
+  --success-soft: rgba(52,168,83,0.12);
+  --warning: #f59e0b;
+  --warning-soft: rgba(245,158,11,0.13);
+  --danger: #ef4444;
+  --danger-soft: rgba(239,68,68,0.10);
+  --info: #64748b;
+  --info-soft: rgba(100,116,139,0.12);
+  --critical: #a21caf;
+  --critical-soft: rgba(162,28,175,0.11);
+  --line: rgba(23,32,51,0.10);
+  --line-soft: rgba(23,32,51,0.06);
+  --glass-border: rgba(255,255,255,0.72);
+  --shadow-sm: 0 2px 10px rgba(23,32,51,0.06);
+  --shadow-md: 0 8px 28px rgba(23,32,51,0.09);
+  --shadow-lg: 0 18px 50px rgba(23,32,51,0.12);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --mono: ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans: -apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --ease: cubic-bezier(0.22,1,0.36,1);
+}
+[data-theme="dark"] {
+  --bg: #0d1117;
+  --bg-elevated: #151b23;
+  --surface: rgba(24,30,40,0.72);
+  --surface-solid: #171d26;
+  --text: #f2f5f8;
+  --text-2: #aeb8c5;
+  --text-3: #7f8a98;
+  --accent: #70a7ff;
+  --accent-hover: #8ab8ff;
+  --accent-soft: rgba(112,167,255,0.14);
+  --success: #4ac86a;
+  --success-soft: rgba(74,200,106,0.16);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251,191,36,0.15);
+  --danger: #f87171;
+  --danger-soft: rgba(248,113,113,0.15);
+  --info: #94a3b8;
+  --info-soft: rgba(148,163,184,0.15);
+  --critical: #d946ef;
+  --critical-soft: rgba(217,70,239,0.16);
+  --line: rgba(255,255,255,0.11);
+  --line-soft: rgba(255,255,255,0.06);
+  --glass-border: rgba(255,255,255,0.09);
+  --shadow-sm: 0 4px 18px rgba(0,0,0,0.20);
+  --shadow-md: 0 10px 32px rgba(0,0,0,0.26);
+  --shadow-lg: 0 20px 60px rgba(0,0,0,0.36);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: var(--sans); font-size: 15px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(900px 500px at 12% -8%, var(--accent-soft), transparent 62%),
+    radial-gradient(800px 460px at 96% 4%, var(--success-soft), transparent 58%);
+  background-attachment: fixed;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px 96px; }
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  border-bottom: 1px solid var(--line-soft);
+}
+.topbar-inner {
+  max-width: 1180px; margin: 0 auto; padding: 10px 24px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.topbar .brand { font-weight: 650; letter-spacing: -0.01em; font-size: 14px; }
+.topbar .brand span { color: var(--text-3); font-weight: 500; }
+nav.toc { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
+nav.toc a {
+  color: var(--text-2); text-decoration: none; font-size: 13px;
+  padding: 5px 10px; border-radius: 8px; transition: all .18s var(--ease);
+}
+nav.toc a:hover { color: var(--accent); background: var(--accent-soft); }
+.iconbtn {
+  border: 1px solid var(--line); background: var(--surface); color: var(--text-2);
+  width: 34px; height: 34px; border-radius: 10px; cursor: pointer; font-size: 15px;
+  display: grid; place-items: center; transition: all .18s var(--ease);
+}
+.iconbtn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- 头部 ---------- */
+header.hero { padding: 52px 0 34px; }
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 8px; font-size: 12px;
+  font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); background: var(--accent-soft);
+  padding: 5px 12px; border-radius: 999px; margin-bottom: 18px;
+}
+h1 { font-size: clamp(28px,4.2vw,42px); line-height: 1.16; margin: 0 0 14px; letter-spacing: -0.025em; font-weight: 680; }
+h1 .grad { background: linear-gradient(100deg, var(--accent), var(--success)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.lede { font-size: 16.5px; color: var(--text-2); max-width: 76ch; margin: 0 0 22px; }
+.meta-row { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13px; color: var(--text-3); }
+.meta-row b { color: var(--text-2); font-weight: 600; }
+.verdict {
+  margin-top: 26px; display: flex; align-items: flex-start; gap: 14px;
+  padding: 18px 22px; border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--success) 42%, transparent);
+  background: var(--success-soft);
+}
+.verdict .vi { font-size: 24px; line-height: 1; }
+.verdict h2 { margin: 0 0 4px; font-size: 16px; }
+.verdict p { margin: 0; font-size: 14px; color: var(--text-2); }
+
+/* ---------- 卡片 ---------- */
+.card {
+  background: var(--surface); border: 1px solid var(--glass-border);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  padding: 24px;
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+}
+section { margin-top: 44px; }
+.sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.sec-head h2 { font-size: 21px; margin: 0; letter-spacing: -0.015em; font-weight: 650; }
+.sec-head .num {
+  font-family: var(--mono); font-size: 12px; color: var(--accent);
+  background: var(--accent-soft); padding: 3px 9px; border-radius: 7px; font-weight: 600;
+}
+.sec-head p { margin: 0; color: var(--text-3); font-size: 13.5px; flex: 1 1 320px; }
+
+.grid { display: grid; gap: 16px; }
+.g-4 { grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); }
+.g-3 { grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
+.g-2 { grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)); }
+.g-cmp { grid-template-columns: repeat(auto-fit, minmax(min(430px, 100%), 1fr)); }
+.span2 { grid-column: span 2; }
+@media (max-width: 760px) { .span2 { grid-column: span 1; } }
+
+/* ---------- KPI ---------- */
+.kpi { text-align: left; }
+.kpi .k-label { font-size: 12.5px; color: var(--text-3); font-weight: 550; letter-spacing: .01em; }
+.kpi .k-value { font-size: 32px; font-weight: 680; letter-spacing: -0.03em; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+.kpi .k-value small { font-size: 15px; color: var(--text-3); font-weight: 500; margin-left: 3px; }
+.kpi .k-note { font-size: 12.5px; color: var(--text-3); }
+
+/* ---------- 评分环 ---------- */
+.score-wrap { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
+.gauge { position: relative; width: 190px; height: 190px; flex: 0 0 auto; }
+.gauge svg { transform: rotate(-90deg); }
+.gauge .track { fill: none; stroke: var(--line); stroke-width: 13; }
+.gauge .val { fill: none; stroke: url(#gaugeGrad); stroke-width: 13; stroke-linecap: round;
+  transition: stroke-dasharray 1.1s var(--ease); }
+.gauge .ctr { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.gauge .ctr .n { font-size: 46px; font-weight: 700; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; line-height: 1; }
+.gauge .ctr .d { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+.score-legend { flex: 1 1 300px; }
+.score-legend .grade {
+  display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650;
+  color: var(--success); background: var(--success-soft); padding: 5px 12px; border-radius: 999px; margin-bottom: 12px;
+}
+.bars { display: grid; gap: 9px; }
+.bar-row { display: grid; grid-template-columns: 84px 1fr 46px; align-items: center; gap: 10px; font-size: 12.5px; }
+.bar-row .bl { color: var(--text-2); }
+.bar-track { height: 7px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 99px; background: var(--accent); transition: width 1.1s var(--ease); }
+.bar-fill.good { background: var(--success); }
+.bar-fill.mid { background: var(--warning); }
+.bar-row .bv { text-align: right; font-family: var(--mono); color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* ---------- 甜甜圈 ---------- */
+.donut-wrap { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
+.donut { position: relative; width: 176px; height: 176px; flex: 0 0 auto; }
+.donut svg { transform: rotate(-90deg); }
+.donut circle { fill: none; stroke-width: 17; }
+.donut .seg { transition: stroke-dasharray 1s var(--ease); cursor: pointer; }
+.donut .seg:hover { opacity: .78; }
+.donut .ctr { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.donut .ctr .n { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.donut .ctr .d { font-size: 11.5px; color: var(--text-3); }
+.dlegend { flex: 1 1 260px; display: grid; gap: 8px; }
+.dlegend .row {
+  display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 10px;
+  font-size: 13.5px; padding: 7px 10px; border-radius: 9px; cursor: pointer; border: 1px solid transparent;
+  transition: all .16s var(--ease);
+}
+.dlegend .row:hover { background: var(--surface-solid); border-color: var(--line); }
+.dlegend .dot { width: 10px; height: 10px; border-radius: 3px; }
+.dlegend .cnt { font-family: var(--mono); font-weight: 650; font-variant-numeric: tabular-nums; }
+.dlegend .cnt.zero { color: var(--text-3); font-weight: 500; }
+
+/* ---------- 徽章 ---------- */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 650;
+  padding: 3px 9px; border-radius: 7px; letter-spacing: .02em; white-space: nowrap;
+}
+.b-critical { color: var(--critical); background: var(--critical-soft); }
+.b-high { color: var(--danger); background: var(--danger-soft); }
+.b-medium { color: var(--warning); background: var(--warning-soft); }
+.b-low { color: var(--accent); background: var(--accent-soft); }
+.b-info { color: var(--info); background: var(--info-soft); }
+.b-fixed { color: var(--success); background: var(--success-soft); }
+.b-na { color: var(--info); background: var(--info-soft); }
+
+/* ---------- 筛选 ---------- */
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+.chip {
+  border: 1px solid var(--line); background: var(--surface); color: var(--text-2);
+  padding: 7px 14px; border-radius: 999px; font-size: 13px; cursor: pointer; font-weight: 550;
+  transition: all .16s var(--ease); font-family: inherit;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip .n { font-family: var(--mono); font-size: 11.5px; opacity: .82; margin-left: 4px; }
+.search {
+  margin-left: auto; display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 14px;
+  min-width: 210px;
+}
+.search input { border: 0; background: transparent; color: var(--text); font-size: 13.5px; font-family: inherit; outline: none; width: 100%; }
+.search span { color: var(--text-3); font-size: 13px; }
+.empty { text-align: center; color: var(--text-3); padding: 34px 0; font-size: 14px; }
+
+/* ---------- 漏洞卡 ---------- */
+.finding {
+  border: 1px solid var(--line); border-left-width: 3px; border-radius: var(--radius-sm);
+  background: var(--surface); overflow: hidden; margin-bottom: 10px;
+  transition: box-shadow .2s var(--ease), border-color .2s var(--ease);
+}
+.finding:hover { box-shadow: var(--shadow-md); }
+.finding[data-sev="high"] { border-left-color: var(--danger); }
+.finding[data-sev="medium"] { border-left-color: var(--warning); }
+.finding[data-sev="low"] { border-left-color: var(--accent); }
+.finding[data-sev="info"] { border-left-color: var(--info); }
+.f-head {
+  display: flex; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer;
+  user-select: none; flex-wrap: wrap;
+}
+.f-head .fid { font-family: var(--mono); font-size: 12px; color: var(--text-3); font-weight: 600; flex: 0 0 auto; }
+.f-head .ft { font-weight: 600; font-size: 14.5px; flex: 1 1 auto; min-width: 0; }
+.f-head .fmod { font-size: 12px; color: var(--text-3); flex: 0 0 auto; }
+.f-head .arrow { color: var(--text-3); font-size: 11px; transition: transform .22s var(--ease); flex: 0 0 auto; }
+.finding.open .f-head .arrow { transform: rotate(90deg); }
+.f-body { display: none; padding: 0 18px 18px; border-top: 1px solid var(--line-soft); }
+.finding.open .f-body { display: block; }
+.f-body h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-3); margin: 16px 0 7px; font-weight: 650; }
+.f-body p { margin: 0 0 8px; font-size: 14px; color: var(--text-2); }
+.f-body ul { margin: 0; padding-left: 20px; font-size: 14px; color: var(--text-2); }
+.f-body li { margin-bottom: 4px; }
+code, .mono { font-family: var(--mono); font-size: 12.8px; }
+code {
+  background: var(--bg-elevated); padding: 1.5px 6px; border-radius: 5px;
+  color: var(--text); border: 1px solid var(--line-soft);
+  word-break: break-word; overflow-wrap: anywhere;
+}
+pre {
+  background: var(--bg-elevated); border: 1px solid var(--line-soft); border-radius: var(--radius-sm);
+  padding: 14px 16px; overflow-x: auto; margin: 8px 0 0; font-size: 12.5px; line-height: 1.62;
+  max-width: 100%;
+}
+pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+.kv { display: grid; grid-template-columns: 92px 1fr; gap: 5px 12px; font-size: 13.5px; }
+.kv dt { color: var(--text-3); font-size: 12.5px; }
+.kv dd { margin: 0; color: var(--text-2); }
+
+/* ---------- 表格 ---------- */
+.tbl-scroll { overflow-x: auto; border-radius: var(--radius-sm); border: 1px solid var(--line); }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--surface); }
+th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); font-weight: 650; background: var(--bg-elevated); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--surface); }
+td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+.num-cell { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 6px; font-size: 11.5px; font-weight: 650; font-family: var(--mono); }
+.p-200 { color: var(--success); background: var(--success-soft); }
+.p-302 { color: var(--accent); background: var(--accent-soft); }
+.p-400 { color: var(--warning); background: var(--warning-soft); }
+.p-401 { color: var(--warning); background: var(--warning-soft); }
+.p-403 { color: var(--success); background: var(--success-soft); }
+.p-404 { color: var(--success); background: var(--success-soft); }
+.p-413 { color: var(--success); background: var(--success-soft); }
+.p-429 { color: var(--success); background: var(--success-soft); }
+.p-bad { color: var(--danger); background: var(--danger-soft); }
+
+/* ---------- 对比块 ---------- */
+.compare { display: grid; gap: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; max-width: 100%; }
+.cmp-row { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid var(--line-soft); font-size: 13.5px; }
+.cmp-row:last-child { border-bottom: 0; }
+.cmp-row.head { background: var(--bg-elevated); font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); font-weight: 650; }
+.cmp-row .pl { font-family: var(--mono); font-size: 12.5px; color: var(--text-2); word-break: break-all; }
+.cmp-row .st { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.cmp-row .st.then { color: var(--danger); }
+.cmp-row .st.now { color: var(--success); }
+.mini-bar { height: 5px; border-radius: 99px; background: var(--line); flex: 0 0 30px; overflow: hidden; }
+.mini-bar i { display: block; height: 100%; border-radius: 99px; background: var(--danger); }
+.mini-bar.ok i { background: var(--success); }
+
+/* ---------- 进度/时间线 ---------- */
+.phases { display: grid; gap: 0; }
+.phase { display: grid; grid-template-columns: 30px 1fr; gap: 14px; }
+.phase .rail { display: flex; flex-direction: column; align-items: center; }
+.phase .dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: var(--success-soft); color: var(--success); flex: 0 0 auto; }
+.phase .line { width: 2px; flex: 1 1 auto; background: var(--line); margin: 4px 0; min-height: 14px; }
+.phase:last-child .line { display: none; }
+.phase .pc { padding-bottom: 18px; }
+.phase .pc h3 { margin: 2px 0 4px; font-size: 14.5px; font-weight: 620; }
+.phase .pc p { margin: 0; font-size: 13.5px; color: var(--text-3); }
+
+/* ---------- 校验清单 ---------- */
+.checks { display: grid; gap: 7px; }
+.chk { display: flex; align-items: flex-start; gap: 10px; font-size: 13.5px; padding: 9px 13px; border-radius: 9px; background: var(--surface); border: 1px solid var(--line-soft); }
+.chk .ic { flex: 0 0 auto; font-weight: 700; font-size: 12px; width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center; background: var(--success-soft); color: var(--success); margin-top: 1px; }
+.chk.warn .ic { background: var(--warning-soft); color: var(--warning); }
+.chk .ct { flex: 1 1 auto; color: var(--text-2); }
+.chk .ct b { color: var(--text); font-weight: 600; }
+.chk .cv { font-family: var(--mono); font-size: 12px; color: var(--text-3); flex: 0 0 auto; }
+
+/* ---------- 说明块 ---------- */
+.callout { border-radius: var(--radius-sm); padding: 15px 18px; font-size: 13.5px; border: 1px solid var(--line); background: var(--surface); color: var(--text-2); }
+.callout.warn { border-color: color-mix(in srgb, var(--warning) 44%, transparent); background: var(--warning-soft); }
+.callout.ok { border-color: color-mix(in srgb, var(--success) 44%, transparent); background: var(--success-soft); }
+.callout b { color: var(--text); }
+.callout ul { margin: 8px 0 0; padding-left: 20px; }
+.callout li { margin-bottom: 5px; }
+
+footer.end { margin-top: 50px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--text-3); font-size: 13px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+@media print {
+  .topbar, .filters, .search { display: none; }
+  .f-body { display: block !important; }
+  body { background: #fff; }
+  .card, .finding { break-inside: avoid; }
+}
+/* 长路径/长标识符在任意位置断行，避免撑破窄视口 */
+.cmp-row .pl, .kv dd, .f-body p, .f-body li { overflow-wrap: anywhere; }
+.f-body code, .callout code, .f-head code { overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  /* 漏洞卡头部改为两行：标题独占第二行，避免被逐字折断 */
+  .f-head .ft { flex: 1 1 100%; order: 3; white-space: normal; word-break: break-word; }
+  .f-head .fmod { order: 1; margin-left: auto; }
+  .f-head .arrow { order: 4; }
+  .cmp-row { grid-template-columns: 1fr 1fr; gap: 8px 12px; font-size: 12.5px; padding: 10px 12px; }
+  .cmp-row > .pl { grid-column: 1 / -1; }
+  .cmp-row.head { display: none; }
+  .cmp-row .st::before { font-size: 10.5px; color: var(--text-3); letter-spacing: .04em; }
+  .cmp-row .st.then::before { content: "修复前"; }
+  .cmp-row .st.now::before { content: "修复后"; }
+  .cmp-row .st.then, .cmp-row .st.now { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .kv { grid-template-columns: 1fr; gap: 1px 0; }
+  .kv dt { margin-top: 7px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">Devr 短链接 <span>/ 安全审计报告</span></div>
+    <nav class="toc">
+      <a href="#overview">总览</a>
+      <a href="#scores">评分</a>
+      <a href="#findings-section">漏洞</a>
+      <a href="#evidence">验证证据</a>
+      <a href="#surface">攻击面</a>
+      <a href="#verify">工具链</a>
+      <a href="#na">非漏洞项</a>
+      <a href="#deploy">上线</a>
+    </nav>
+    <button class="iconbtn" id="themeBtn" title="切换明暗主题" aria-label="切换明暗主题">◐</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Security Audit · 已完成修复与回归验证</div>
+  <h1>短链接系统 <span class="grad">安全审计报告</span></h1>
+  <p class="lede">
+    对 PHP 8.2 + Vue 3 + SQLite 短链接服务的完整安全审计：源码审计 → 本地环境实际渗透验证 →
+    代码级修复 → 自动化回归测试 → 再次实际验证。所有 High / Medium 结论均有真实 HTTP 请求证据，未使用"理论风险"充数。
+  </p>
+  <div class="meta-row">
+    <span><b>项目</b> devr v0.3.0</span>
+    <span><b>技术栈</b> PHP 8.2 · SQLite · Vue 3 · Nginx · Docker</span>
+    <span><b>审计日期</b> 2026-10-06</span>
+    <span><b>风险等级</b> Good（良好）</span>
+  </div>
+
+  <div class="verdict">
+    <div class="vi">✅</div>
+    <div>
+      <h2>可以上线 · 无阻断项</h2>
+      <p>原 2 项 High、5 项 Medium、4 项 Low 问题已全部修复（共 15 条风险条目），并通过实际 HTTP 请求复测与 60 项自动化回归测试。上线前需完成 3 项配置（默认密码、IP 哈希密钥、确认关闭调试）。</p>
+    </div>
+  </div>
+</header>
+
+<!-- ============ 总览 ============ -->
+<section id="overview">
+  <div class="sec-head">
+    <span class="num">01</span>
+    <h2>审计总览</h2>
+    <p>风险总览 16 条：2 High · 5 Medium · 4 Low · 5 Info（已修复 15 条，1 条判定无需修复）。另有 6 项经实测判定为非漏洞 / 设计取舍，不计入。</p>
+  </div>
+
+  <div class="grid g-4">
+    <div class="card kpi">
+      <div class="k-label">确认风险条目</div>
+      <div class="k-value">16<small>项</small></div>
+      <div class="k-note">2 High · 5 Medium · 4 Low · 5 Info</div>
+    </div>
+    <div class="card kpi">
+      <div class="k-label">已修复并验证</div>
+      <div class="k-value" style="color:var(--success)">15<small>项</small></div>
+      <div class="k-note">含 5 项 Medium · 全部实测复测通过</div>
+    </div>
+    <div class="card kpi">
+      <div class="k-label">自动化测试</div>
+      <div class="k-value">172<small>项</small></div>
+      <div class="k-note">479 断言 · 含 60 项新增安全测试</div>
+    </div>
+    <div class="card kpi">
+      <div class="k-label">实测复测项</div>
+      <div class="k-value">21<small>项</small></div>
+      <div class="k-note">全部 PASS · 无回归</div>
+    </div>
+  </div>
+
+  <div class="grid g-2" style="margin-top:16px">
+    <div class="card">
+      <h3 style="margin:0 0 14px;font-size:15px;font-weight:620">严重程度分布</h3>
+      <div class="donut-wrap">
+        <div class="donut">
+          <svg width="176" height="176" viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="46" stroke="var(--line)" pathLength="100"></circle>
+            <circle class="seg" cx="60" cy="60" r="46" stroke="var(--danger)"  pathLength="100" data-seg="high"></circle>
+            <circle class="seg" cx="60" cy="60" r="46" stroke="var(--warning)" pathLength="100" data-seg="medium"></circle>
+            <circle class="seg" cx="60" cy="60" r="46" stroke="var(--accent)"  pathLength="100" data-seg="low"></circle>
+            <circle class="seg" cx="60" cy="60" r="46" stroke="var(--info)"    pathLength="100" data-seg="info"></circle>
+          </svg>
+          <div class="ctr">
+            <div class="n">16</div>
+            <div class="d">风险条目</div>
+          </div>
+        </div>
+        <div class="dlegend" id="dlegend"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 14px;font-size:15px;font-weight:620">审计覆盖范围</h3>
+      <div class="checks">
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>后端源码</b> Controller / Service / Repository / Http / Security / Support / Validation</span></div>
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>入口与路由</b> public/index.php · routes/web.php（20 条路由）</span></div>
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>前端</b> src/ Vue 组件 · dist/ 构建产物 · index.html</span></div>
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>部署</b> Dockerfile · docker-compose · Nginx × 3 · 宝塔包 · supervisord</span></div>
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>依赖</b> composer.lock（0 运行时依赖）· package-lock.json</span></div>
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>数据与日志</b> SQLite 结构 · storage/logs 内容审查</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 评分 ============ -->
+<section id="scores">
+  <div class="sec-head">
+    <span class="num">02</span>
+    <h2>安全评分</h2>
+    <p>按修复后的实际状态评定，十个维度各 10 分。</p>
+  </div>
+
+  <div class="card">
+    <div class="score-wrap">
+      <div class="gauge">
+        <svg width="190" height="190" viewBox="0 0 120 120">
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="var(--accent)"/>
+              <stop offset="100%" stop-color="var(--success)"/>
+            </linearGradient>
+          </defs>
+          <circle class="track" cx="60" cy="60" r="50" pathLength="100"></circle>
+          <circle class="val" id="gaugeVal" cx="60" cy="60" r="50" pathLength="100"
+                  stroke-dasharray="0 100" stroke-dashoffset="0"></circle>
+        </svg>
+        <div class="ctr">
+          <div class="n" id="gaugeNum">0</div>
+          <div class="d">综合评分 / 100</div>
+        </div>
+      </div>
+
+      <div class="score-legend">
+        <div class="grade">◆ 等级：良好（Good）</div>
+        <div class="bars" id="scoreBars"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 漏洞 ============ -->
+<section id="findings-section">
+  <div class="sec-head">
+    <span class="num">03</span>
+    <h2>漏洞与修复明细</h2>
+    <p>共 16 条风险条目，点击展开详情（原因 / 修复方案 / 影响 / 兼容性）。下方 SEC-001 ~ SEC-016 为风险总览表全量；另有 6 项经实测判定为非漏洞，见 <a href="#na" style="color:var(--accent)">第 07 节</a>。</p>
+  </div>
+
+  <div class="filters">
+    <button class="chip on" data-filter="all">风险条目 <span class="n">16</span></button>
+    <button class="chip" data-filter="high">High <span class="n">2</span></button>
+    <button class="chip" data-filter="medium">Medium <span class="n">5</span></button>
+    <button class="chip" data-filter="low">Low <span class="n">4</span></button>
+    <button class="chip" data-filter="info">Info <span class="n">5</span></button>
+    <div class="search">
+      <span>⌕</span>
+      <input id="q" type="search" placeholder="搜索 ID / 关键词…" aria-label="搜索漏洞" />
+    </div>
+  </div>
+
+  <div id="findings"></div>
+  <div class="empty" id="empty" style="display:none">没有匹配的条目</div>
+</section>
+
+<!-- ============ 验证证据 ============ -->
+<section id="evidence">
+  <div class="sec-head">
+    <span class="num">04</span>
+    <h2>修复前后实测对比</h2>
+    <p>左列为修复前的实际响应，右列为修复后。全部通过真实 HTTP 请求获取。</p>
+  </div>
+
+  <div class="grid g-cmp">
+    <div class="card span2">
+      <h3 style="margin:0 0 4px;font-size:15px">SEC-001 · 路径穿越（本地开发服务器）</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">
+        修复前 <code>/../.env</code> 直接返回配置文件内容，数据库文件 64 KB 全量泄露。
+      </p>
+      <div class="compare" id="cmpTraversal"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 4px;font-size:15px">SEC-003 · CSRF 跨站写操作</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">跨站表单可创建 API Key、删除短链。</p>
+      <div class="compare" id="cmpCsrf"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 4px;font-size:15px">SEC-004 · 请求体与 URL 长度</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">1 MB URL 曾可入库，耗时 1.1 秒。</p>
+      <div class="compare" id="cmpSize"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 4px;font-size:15px">SEC-002 · 客户端 IP 与限流</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">限流桶曾退化为常量 <code>anonymous</code>，全站共享。</p>
+      <div class="compare" id="cmpIp"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 4px;font-size:15px">SEC-010 · 创建接口限流</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">65 次连续创建，默认 60 次/分钟/IP。</p>
+      <div class="compare" id="cmpRate"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3 style="margin:0 0 14px;font-size:15px">安全响应头实测（修复后实际输出）</h3>
+<pre><code>HTTP/1.1 200 OK
+x-content-type-options: nosniff
+x-frame-options: DENY
+referrer-policy: strict-origin-when-cross-origin
+permissions-policy: geolocation=(), microphone=(), camera=(), payment=()
+content-security-policy: default-src 'self';
+  script-src 'self'
+    'sha256-JS8WnjBrSLDNgx1F24d3bkiyA+wUr+5X9/dVsZOGmgg='
+    'sha256-wrNlu4oLmJobRzDk9UObxfmE275xTC+oALhpk779qaE='
+    https://www.googletagmanager.com;
+  style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;
+  font-src 'self' data:; connect-src 'self'; form-action 'self';
+  frame-ancestors 'none'; base-uri 'self'; object-src 'none'</code></pre>
+    <div class="callout ok" style="margin-top:14px">
+      <b>CSP 与构建产物的一致性已用真实浏览器验证。</b>
+      项目 <code>index.html</code> 内联了两段脚本（首帧主题、Google Analytics 引导），
+      若要简单地写 <code>script-src 'self'</code> 会直接打断 SPA。因此对 HTML 响应按内容动态计算
+      内联脚本 sha256，前端重新构建后自动匹配。实测：SPA 正常挂载、样式生效、接口调用成功、
+      结果卡片渲染正常、控制台无 CSP 违规。
+    </div>
+  </div>
+</section>
+
+<!-- ============ 攻击面 ============ -->
+<section id="surface">
+  <div class="sec-head">
+    <span class="num">05</span>
+    <h2>攻击面清单</h2>
+    <p>据源码实际路由整理，非推测。全部管理接口均经路由守卫强制鉴权。</p>
+  </div>
+  <div class="card" style="padding:0">
+    <div class="tbl-scroll">
+      <table>
+        <thead>
+          <tr><th>模块</th><th>Endpoint</th><th>方法</th><th>认证</th><th>输入</th><th>风险</th><th>未登录实测</th></tr>
+        </thead>
+        <tbody id="surfaceBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 工具链 ============ -->
+<section id="verify">
+  <div class="sec-head">
+    <span class="num">06</span>
+    <h2>自动化验证结果</h2>
+    <p>修复完成后执行的完整质量门禁。</p>
+  </div>
+
+  <div class="grid g-2">
+    <div class="card" style="padding:0">
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>命令</th><th>结果</th><th>状态</th></tr></thead>
+          <tbody id="toolBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 14px;font-size:15px">测试套件构成</h3>
+      <div class="bars" id="suiteBars"></div>
+      <div class="callout" style="margin-top:16px">
+        <b>安全回归套件</b>（<code>backend/tests/Security/</code>）把审计确认的每个问题固化为断言：
+        路径穿越、CSRF、体积上限、限流分桶、客户端 IP 保留、安全响应头、CSP 哈希、
+        API Key 生命周期、会话失效、Referer 隐私等共 60 项。
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3 style="margin:0 0 14px;font-size:15px">依赖审计可达性判定（不只看 CVE 数量）</h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>包</th><th>等级</th><th>位置</th><th class="num-cell">产物命中</th><th>是否影响本项目</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">braces</td><td><span class="badge b-high">High</span></td><td class="mono">tailwindcss → chokidar → braces</td><td class="num-cell">0</td><td>否 · 仅构建期 glob/watch</td></tr>
+          <tr><td class="mono">chokidar</td><td><span class="badge b-high">High</span></td><td class="mono">tailwindcss → chokidar</td><td class="num-cell">0</td><td>否 · 仅构建期监听</td></tr>
+          <tr><td class="mono">micromatch</td><td><span class="badge b-high">High</span></td><td class="mono">tailwindcss → chokidar</td><td class="num-cell">0</td><td>否 · 同上</td></tr>
+          <tr><td class="mono">fast-glob</td><td><span class="badge b-high">High</span></td><td class="mono">tailwindcss → fast-glob</td><td class="num-cell">0</td><td>否 · 同上</td></tr>
+          <tr><td class="mono">postcss-selector-parser</td><td><span class="badge b-medium">Moderate</span></td><td class="mono">tailwindcss → postcss-nested</td><td class="num-cell">0</td><td>否 · 只处理项目自有 CSS</td></tr>
+          <tr><td class="mono">composer 运行时依赖</td><td><span class="badge b-info">—</span></td><td class="mono">packages = 0 条</td><td class="num-cell">—</td><td>无第三方运行时依赖</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout warn" style="margin-top:14px">
+      <b>判定为不修复。</b> 7 项告警全部来自 <code>tailwindcss</code> 的构建期工具链，
+      <code>dist/assets/*.js</code> 中匹配数为 0；修复需要 Tailwind 4 破坏性升级。
+      为消除不可达告警而引入样式系统重构风险不划算，已记录为 SEC-012（Info）。
+    </div>
+  </div>
+</section>
+
+<!-- ============ 非漏洞项 ============ -->
+<section id="na">
+  <div class="sec-head">
+    <span class="num">07</span>
+    <h2>明确判定为「非漏洞」的检查项</h2>
+    <p>审计规则要求：不存在攻击面时明确写明 Not Applicable，不把理论风险当漏洞。</p>
+  </div>
+
+  <div class="grid g-2">
+    <div class="card">
+      <h3 style="margin:0 0 12px;font-size:15px">Not Applicable（无此攻击面）</h3>
+      <div class="checks">
+        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>SSRF</b> · 后端从不请求用户提交的 URL，仅 <code>parse_url</code> 校验后落库并 302<br><span style="color:var(--text-3);font-size:12.5px">无预览、无标题抓取、无 URL 探测</span></span></div>
+        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>SQL 注入</b> · 全量 <code>PDO::prepare</code> + 绑定参数，LIKE 通配符显式转义<br><span style="color:var(--text-3);font-size:12.5px">实测 <code>' OR 1=1 --</code>、<code>'; DROP TABLE --</code>、<code>UNION SELECT</code> 均无效</span></span></div>
+        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>命令执行 / 任意文件写入</b> · 全项目无用户输入路径进入 <code>exec/system/eval/include</code></span></div>
+        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>IDOR</b> · 单管理员模型，所有管理接口作用于全站资源，无按用户划分的归属</span></div>
+        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>短链删除后数据残留</b> · 同一 <code>BEGIN IMMEDIATE</code> 事务内删除短链与全部点击记录</span></div>
+        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>容器逃逸类风险</b> · 无 privileged、无 host network/PID、未挂载 Docker Socket</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 12px;font-size:15px">设计取舍 / 已验证通过（非漏洞）</h3>
+      <div class="checks">
+        <div class="chk warn"><span class="ic">i</span><span class="ct"><b>顺序短码可枚举</b> · 与原 Node 版逐位兼容的既有产品行为<br><span style="color:var(--text-3);font-size:12.5px">后台可开启随机短码（最短 3 位，<code>random_int</code>）。短码是公开分享的跳转标识，非访问控制凭据</span></span></div>
+        <div class="chk warn"><span class="ic">i</span><span class="ct"><b>开放重定向</b> · 302 跳转是产品核心功能<br><span style="color:var(--text-3);font-size:12.5px">已核实：仅接受 http/https；CRLF 不能注入 Location（实测仅有原始 location 头）</span></span></div>
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>并发与碰撞</b> · 10 / 50 / 100 并发创建，<b>无重复短码、无错误</b><br><span style="color:var(--text-3);font-size:12.5px">计数器在 <code>BEGIN IMMEDIATE</code> 内自增，<code>code</code> 为主键</span></span></div>
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>限流不可被代理头绕过</b> · 换 6 个不同 <code>X-Forwarded-For</code> 仍在第 6 次被 429</span></div>
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>日志不含敏感值</b> · 检索 password/token/bearer/cookie/api_key 仅命中固定文案 <code>"admin password changed"</code></span></div>
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>存储型 XSS 不可行</b> · <code>src/</code> 无 <code>v-html</code>/<code>innerHTML</code>/<code>eval</code>；用户数据全部经 Vue 文本插值转义</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 上线 ============ -->
+<section id="deploy">
+  <div class="sec-head">
+    <span class="num">08</span>
+    <h2>上线前必做与未验证项</h2>
+    <p>如实标注未能验证的部分，不伪造结果。</p>
+  </div>
+
+  <div class="grid g-2">
+    <div class="card">
+      <h3 style="margin:0 0 12px;font-size:15px">上线前必做（3 项）</h3>
+      <div class="checks">
+        <div class="chk warn"><span class="ic">!</span><span class="ct"><b>修改管理后台默认密码</b> <code>admin123</code><br><span style="color:var(--text-3);font-size:12.5px">推荐设置 <code>ADMIN_PASSWORD_HASH</code>，或登录后台「设置」页修改</span></span></div>
+        <div class="chk warn"><span class="ic">!</span><span class="ct"><b>设置 <code>IP_HASH_SECRET</code></b><br><span style="color:var(--text-3);font-size:12.5px">如 <code>openssl rand -hex 32</code>；设置后 IP 改用 HMAC，数据库泄露也无法反推 IP</span></span></div>
+        <div class="chk warn"><span class="ic">!</span><span class="ct"><b>确认 <code>APP_DEBUG=false</code>、<code>APP_ENV=production</code></b><br><span style="color:var(--text-3);font-size:12.5px">宝塔部署另需删除 <code>public/check.php</code> 与 <code>.check-token</code></span></span></div>
+      </div>
+      <div class="callout" style="margin-top:14px">
+        <b>HTTPS 站点</b>建议同时设置 <code>APP_URL=https://你的域名</code> 与
+        <code>HSTS_MAX_AGE=31536000</code>；跨域部署前端需把前端源写入 <code>ALLOWED_ORIGINS</code>。
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 12px;font-size:15px">未验证项（如实标注）</h3>
+      <div class="checks">
+        <div class="chk warn"><span class="ic">?</span><span class="ct"><b>Docker 镜像构建与容器内运行</b> <span class="cv">Potential</span><br><span style="color:var(--text-3);font-size:12.5px">本机无 Docker 环境，加固为静态审阅结论（SEC-015 / SEC-016）</span></span></div>
+        <div class="chk warn"><span class="ic">?</span><span class="ct"><b>Nginx 实际生效验证</b> <span class="cv">Potential</span><br><span style="color:var(--text-3);font-size:12.5px">本机无 Nginx，三个配置文件为参考模板（SEC-008 / SEC-014）</span></span></div>
+        <div class="chk warn"><span class="ic">?</span><span class="ct"><b>宝塔面板真实部署</b> <span class="cv">未执行</span><br><span style="color:var(--text-3);font-size:12.5px">宝塔包行为已通过 PHP 内置服务器实测（令牌、路径穿越、路由）</span></span></div>
+        <div class="chk warn"><span class="ic">?</span><span class="ct"><b>大规模压力测试</b> <span class="cv">有意未做</span><br><span style="color:var(--text-3);font-size:12.5px">按审计规则不做不可控压力测试；仅小规模并发验证正确性</span></span></div>
+      </div>
+      <div class="callout ok" style="margin-top:14px">
+        <b>真实数据库未被触碰。</b> 全部实测使用独立临时数据库；
+        项目自身的 <code>backend/storage/short-url.sqlite3</code> 未被修改或删除。
+        另用其副本验证了旧库升级：新增表自动创建，15 行数据全部保留，无需手工迁移。
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3 style="margin:0 0 16px;font-size:15px">审计执行流程</h3>
+    <div class="phases">
+      <div class="phase"><div class="rail"><div class="dot">1</div><div class="line"></div></div>
+        <div class="pc"><h3>攻击面建模与源码审计</h3><p>枚举 20 条路由、鉴权/授权、输入输出、文件操作、配置加载；逐项追踪数据流（Auth · CSRF · SQL · XSS · SSRF · 路径穿越 · 隐私 · 日志）</p></div></div>
+      <div class="phase"><div class="rail"><div class="dot">2</div><div class="line"></div></div>
+        <div class="pc"><h3>本地环境实际渗透验证</h3><p>启动 PHP 8.2.34 + 独立测试库；对每个可疑点构造真实 HTTP 请求取证，确认 2 High / 5 Medium / 4 Low / 5 Info</p></div></div>
+      <div class="phase"><div class="rail"><div class="dot">3</div><div class="line"></div></div>
+        <div class="pc"><h3>代码级修复</h3><p>后端强制校验（不靠前端隐藏）、不关闭功能、不弱化策略；新增 Security 层（CsrfGuard / SecurityHeaders / RequestRateLimiter / DevStaticFile）</p></div></div>
+      <div class="phase"><div class="rail"><div class="dot">4</div><div class="line"></div></div>
+        <div class="pc"><h3>回归测试固化</h3><p>新增 <code>tests/Security/</code> 60 项断言，把每个已确认问题固化为可重复执行的测试</p></div></div>
+      <div class="phase"><div class="rail"><div class="dot">5</div><div class="line"></div></div>
+        <div class="pc"><h3>全量质量门禁</h3><p>phpunit · phpstan L8 · php-cs-fixer · npm audit · npm run build 全部通过</p></div></div>
+      <div class="phase"><div class="rail"><div class="dot">6</div><div class="line"></div></div>
+        <div class="pc"><h3>再次验证与浏览器复核</h3><p>重放全部攻击 payload 确认失效；用真实浏览器确认 CSP 未打断 SPA、首页与后台功能完整</p></div></div>
+    </div>
+  </div>
+</section>
+
+<footer class="end">
+  <div>devr v0.3.0 · 安全审计报告 · 2026-10-06</div>
+  <div>配套文档：SECURITY-AUDIT.md · SECURITY-FIXES.md · SECURITY-TEST-REPORT.md</div>
+</footer>
+
+</div>
+
+<script>
+/* ================= 数据 ================= */
+const SEV_META = {
+  high:   { label: 'High',   cls: 'b-high',   color: 'var(--danger)' },
+  medium: { label: 'Medium', cls: 'b-medium', color: 'var(--warning)' },
+  low:    { label: 'Low',    cls: 'b-low',    color: 'var(--accent)' },
+  info:   { label: 'Info',   cls: 'b-info',   color: 'var(--info)' }
+};
+
+const FINDINGS = [
+  { id:'SEC-001', sev:'high', title:'本地开发服务器静态回退路径穿越', mod:'文件访问 / 部署', fixed:true,
+    why:'<code>backend/public/index.php</code> 在 <code>cli-server</code> 分支把请求路径只剔除反斜杠与 NUL 后与静态根目录字符串拼接：<code>$file = $staticRoot.$safePath</code>。<code>rawurldecode</code> 在路由之前执行，因此 <code>%2e%2e</code>、<code>..%2f</code> 等编码形式同样会被解开。项目根目录恰是静态根 <code>dist/</code> 的上级，于是 <code>/../.env</code>、<code>/../backend/storage/*.sqlite3</code> 全部可读。',
+    impact:'<b>机密性：高。</b> .env（含 ADMIN_PASSWORD）、SQLite 数据库（全部短链、点击记录、api_keys 哈希、登录 token 哈希）、后端源码、.git 完全泄露；凭据泄露即可直接接管管理后台。',
+    fix:'新增 <code>App\\Support\\DevStaticFile</code>：用 <code>realpath()</code> 归一化后强制校验结果位于允许根目录内部（含分隔符边界比较，避免 <code>/dist-evil</code> 绕过），并显式拒绝返回 <code>.php</code>（否则内置服务器会输出源码）。宝塔包同类分支同步修复。',
+    compat:'无。正常静态资源（/、/index.html、/assets/*、/favicon.svg、/manifest.json、/robots.txt）实测仍正常。',
+    code:'// 修复前\n$safePath = str_replace([\'\\\\\', "\\0"], \'\', $path);\n$file = $staticRoot.$safePath;   // /../.env 直接生效\nif (is_file($file)) { readfile($file); }\n\n// 修复后\n$file = DevStaticFile::resolve($path, [\n    dirname(__DIR__, 2).\'/dist\', dirname(__DIR__, 2).\'/public\'\n]);\nif ($file !== null) { /* realpath 归属校验已通过 */ }' },
+
+  { id:'SEC-002', sev:'high', title:'客户端 IP 在路由参数注入后丢失', mod:'认证 / 统计', fixed:true,
+    why:'<code>Router::dispatch()</code> 总是用 <code>$request->withParams($params)</code> 的返回值调用处理器，而 <code>withParams()</code> 只传递前 6 个构造参数，漏掉第 7 个 <code>$remoteAddress</code>，导致<b>所有</b>处理器拿到的 <code>clientIp()</code> 恒为空串。',
+    impact:'<b>可用性：高。</b> 登录限流回退为常量 <code>\'anonymous\'</code>，全站共享一个桶——任意单一来源即可把全部管理员锁在门外（而该桶无法区分攻击者）。同时点击统计的 <code>ip_hash</code> 恒为 <code>NULL</code>，独立访客用 <code>COUNT(DISTINCT ip_hash) WHERE ip_hash IS NOT NULL</code> 统计，结果恒为 0。',
+    fix:'<code>withParams()</code> 显式透传 <code>$this->remoteAddress</code>；并在安全套件中用带 IP 的请求固化「IP 在路由注入后仍然保留」与「跳转记录 ip_hash 非空」。',
+    compat:'无。测试助手同步补充了默认 Host/Origin 头（真实浏览器写请求必然携带），既有 112 个测试全部保持通过。',
+    code:'// 修复前\nreturn new self($this->method, $this->path, $this->rawBody,\n    $this->query, $this->headers, $params);\n\n// 修复后\nreturn new self($this->method, $this->path, $this->rawBody,\n    $this->query, $this->headers, $params,\n    $this->remoteAddress);   // 丢失它会让限流按空 IP 归并' },
+
+  { id:'SEC-003', sev:'medium', title:'状态变更请求缺少来源校验（CSRF）', mod:'CSRF', fixed:true,
+    why:'登录态存于 Cookie（浏览器自动附带），全部写操作（改设置、改密码、增删短链、增删/重置 API Key）没有任何 CSRF Token 或 Origin/Referer 校验，唯一防线是 <code>SameSite=Strict</code>。该属性有效但不构成完整防护：旧浏览器与嵌入式 WebView 不识别它，站点若出现 <code>http://</code> 子域或同一站点的其它端口，"同站"判定也不覆盖。',
+    impact:'<b>完整性：中。</b> 管理员操作可被伪造（改设置、改密码、增删短链与 API Key），前提是管理员已登录并访问攻击者页面。',
+    fix:'新增 <code>App\\Security\\CsrfGuard</code>，在 <code>App::handle()</code> 中早于任何处理器执行：只校验非 GET/HEAD/OPTIONS；来源取 <code>Origin</code>（<code>null</code> 视为无效），缺失时取 <code>Referer</code> 的协议+主机；与请求 <code>Host</code> 比较判定同源（协议不参与比较，以适配内网 TLS 卸载）；支持 <code>ALLOWED_ORIGINS</code> 白名单。',
+    compat:'<b>有影响。</b> 用 curl/脚本调用公开创建接口（/url、/api/url）需补 Origin 头，或设 <code>CSRF_ALLOW_MISSING_ORIGIN=true</code>；开放 API 带 Key 调用不受影响；跨域部署需配 ALLOWED_ORIGINS。',
+    code:'// 关键设计：显式凭据头例外\n// CSRF 成立前提是「浏览器自动附带凭据」；自定义请求头只能由脚本显式设置，\n// 跨站表单无法添加，浏览器跨域设置自定义头会先触发预检（本服务不返回 CORS 允许头）。\nprivate function hasExplicitCredential(Request $request): bool\n{\n    $apiKey = $request->header(\'x-api-key\');\n    if (is_string($apiKey) && trim($apiKey) !== \'\') { return true; }\n    $auth = $request->header(\'authorization\');\n    return is_string($auth) && preg_match(\'/^Bearer\\s+\\S+/i\', $auth) === 1;\n}' },
+
+  { id:'SEC-004', sev:'medium', title:'请求体与目标 URL 长度无上限', mod:'输入验证 / DoS', fixed:true,
+    why:'<code>Request::fromGlobals()</code> 无条件把 <code>php://input</code> 全部读入内存并 <code>json_decode</code>；<code>UrlValidator</code> 只校验协议/主机/空白字符，不限制长度。短链库属长期存储，单条 1 MB URL 会被永久写入。',
+    impact:'<b>可用性：中。</b> 单请求内存与存储占用无上限；实测 1 MB URL 响应时间从 44 ms 升至 1.1 秒，库文件由 64 KB 增至 1.2 MB，且响应体回显整条 URL。持续提交可耗尽磁盘。',
+    fix:'新增 <code>PayloadTooLargeException</code> → 413。全局请求体上限 <code>MAX_BODY_BYTES</code>（默认 16384）在 <code>App::handle()</code> 最前置校验；<code>UrlValidator::MAX_LENGTH = 2048</code>，在归一化<b>前后各校验一次</b>（先按输入长度快速拒绝以避免对大字符串跑正则，归一化后长度可能因百分号编码变长）。',
+    compat:'有影响但范围合理。2048 字节覆盖主流浏览器实际可用范围，实测边界值 2048 仍返回 200；更长返回 413，可通过 MAX_BODY_BYTES 调整。',
+    code:'public const MAX_LENGTH = 2048;\n\nif (strlen($url) > self::MAX_LENGTH) {\n    throw new PayloadTooLargeException(\'URL exceeds \'.self::MAX_LENGTH.\' bytes\');\n}\n// ... 归一化后再校验实际入库长度\n$normalized = $this->normalize($url);\nif (strlen($normalized) > self::MAX_LENGTH) { /* 413 */ }' },
+
+  { id:'SEC-005', sev:'medium', title:'部署包自检页无鉴权且产生数据写入', mod:'信息泄露 / 部署', fixed:true,
+    why:'<code>deploy/baota/public/check.php</code> 面向公网开放且无需任何凭据，输出 PHP 版本、扩展加载情况、storage 可写性、数据库连接状态与"真实异常"信息（含路径细节）。更严重的是页面加载时会执行一次「创建短链 → 跳转」全链路，<b>每次访问都在真实数据库写入一条短链</b>。',
+    impact:'<b>机密性：中</b>（泄露服务器环境与部署细节，为后续攻击提供情报）；<b>完整性：中</b>（污染短链表）。部署文档虽建议排障后删除，但极易遗漏。',
+    fix:'自检页要求访问令牌：打包脚本用 <code>random_bytes(16)</code> 生成并写入包根 <code>.check-token</code>（Web 根之外），页面用 <code>hash_equals()</code> 常量时间比较；令牌文件缺失时一律拒绝。移除路径与配置值回显；全链路实测改为显式 <code>&run=1</code> 触发，并在同一请求内删除探针数据（含点击记录）。',
+    compat:'自检页访问方式变为 <code>/check.php?token=&lt;令牌&gt;</code>；部署说明与 README 已同步，打包输出会直接打印令牌。',
+    code:'$expected = is_file($tokenFile) ? trim((string) file_get_contents($tokenFile)) : \'\';\n$provided = isset($_GET[\'token\']) && is_string($_GET[\'token\']) ? trim($_GET[\'token\']) : \'\';\n\nif ($expected === \'\' || $provided === \'\' || !hash_equals($expected, $provided)) {\n    http_response_code(403);\n    exit;\n}' },
+
+  { id:'SEC-006', sev:'medium', title:'缺少安全响应头并泄露 PHP 版本', mod:'响应头', fixed:true,
+    why:'全部响应均无 CSP、X-Content-Type-Options、X-Frame-Options、Referrer-Policy、Permissions-Policy、HSTS；每个响应附带 <code>X-Powered-By: PHP/8.2.34</code>（精确补丁版本）。缺 CSP 意味着一旦出现注入点即无浏览器侧最后防线；缺 XFO 使管理后台可被 iframe 嵌套（点击劫持）。',
+    impact:'机密性低（版本指纹、Referer 泄露）；完整性低（缺少纵深防御）。',
+    fix:'新增 <code>App\\Security\\SecurityHeaders</code>，在成功与异常两条路径统一附加（避免错误响应漏掉安全头）。CSP 对 HTML 响应<b>按内容动态计算内联脚本 sha256</b>；<code>frame-ancestors</code> 与 XFO 双写；HSTS 仅在 <code>X-Forwarded-Proto: https</code> 且 <code>HSTS_MAX_AGE &gt; 0</code> 时下发（避免锁死纯 HTTP 部署）；<code>X-Powered-By</code> 由入口 <code>header_remove()</code> 移除。',
+    compat:'有影响：跨域部署需把后端源写入 <code>CSP_CONNECT_EXTRA</code>，否则 <code>connect-src \'self\'</code> 会拦截 API；更换统计脚本需设 <code>CSP_SCRIPT_EXTRA</code>。已用真实浏览器验证功能完整。',
+    code:'$hashes = [];\nif (str_starts_with($response->header(\'content-type\') ?? \'\', \'text/html\')) {\n    $hashes = self::inlineScriptHashes($response->body());\n}\n// script-src 拼接 \'self\' + 动态哈希 + 白名单' },
+
+  { id:'SEC-010', sev:'medium', title:'创建接口无频次限制', mod:'API 滥用 / DoS', fixed:true,
+    why:'公开创建接口（<code>/url</code>、<code>/api/url</code>）与开放 API（<code>/api/open/shorten</code>）均无调用频次限制，单一来源可无限创建短码。',
+    impact:'可用性中。持续消耗磁盘、增长 SQLite 文件、无上限产生短码（还可用尽短码空间）。实测修复前 65 次请求全部返回 200。',
+    fix:'新增 <code>request_throttle</code> 表与 <code>App\\Security\\RequestRateLimiter</code>，按 IP 匿名哈希在固定窗口计数；计数在 <code>BEGIN IMMEDIATE</code> 事务内 upsert 后回读，保证并发下不丢失；公开接口与开放 API 共用 <code>create</code> 计数域。',
+    compat:'默认 60 次/分钟/IP，正常人工使用远低于阈值；内网或仅管理员使用可设 <code>CREATE_RATE_LIMIT_MAX=0</code> 关闭。<b>数据库变化：新增表由 CREATE TABLE IF NOT EXISTS 自动创建，对存量库零侵入。</b>',
+    code:'INSERT INTO request_throttle (scope, subject, window_start, hits)\nVALUES (:scope, :subject, :window_start, 1)\nON CONFLICT(scope, subject) DO UPDATE SET\n   hits = CASE WHEN request_throttle.window_start = excluded.window_start\n               THEN request_throttle.hits + 1 ELSE 1 END,\n   window_start = excluded.window_start' },
+
+  { id:'SEC-007', sev:'low', title:'会话 Cookie 的 Secure 属性依赖 APP_URL', mod:'Session', fixed:true,
+    why:'<code>Secure</code> 仅看 <code>APP_URL</code> 前缀。生产若沿用 .env.example 的 <code>http://</code> 默认值，HTTPS 站点会下发不带 Secure 的会话 Cookie，存在被明文回传（同域 HTTP 端点、降级请求）的风险。',
+    impact:'机密性低（会话可能在明文链路上暴露）。',
+    fix:'<code>authCookie()</code>/<code>logout()</code> 增加 <code>$secure</code> 参数，由 <code>SecurityHeaders::isSecureRequest()</code> 传入（识别反代 <code>X-Forwarded-Proto</code>），最终判定为「请求经 HTTPS <b>或</b> APP_URL 为 https」。',
+    compat:'无。本地 HTTP 开发行为不变。' },
+
+  { id:'SEC-008', sev:'low', title:'宝塔 Nginx 参考配置缺少敏感路径阻断', mod:'Nginx 配置', fixed:true,
+    why:'配置只声明 root 与静态规则，未阻断 <code>.env</code>、<code>.git</code>、<code>*.sqlite3</code>、<code>*.log</code> 与后端源码目录，也未禁止把 <code>.php</code> 当静态文件输出。若部署者把 root 误配到项目根（常见失误），上述文件即可被直接下载；PHP-FPM 不可用时 Nginx 会原样输出 PHP 源码。',
+    impact:'机密性低（依赖误配）。',
+    fix:'三个 Nginx 配置（short-url / compose / docker）统一加入敏感文件后缀阻断、后端源码目录阻断、<code>\\.php$</code> 独立 location 并 <code>try_files $uri =404</code>，形成纵深防御。',
+    compat:'无（仅对敏感路径追加拒绝）。注：deploy/nginx/ 为参考模板，实际宝塔站点配置需部署者粘贴生效。' },
+
+  { id:'SEC-009', sev:'low', title:'本地开发默认开启调试且异常消息回显', mod:'错误处理', fixed:true,
+    why:'仓库根 <code>.env</code> 为本地开发值 <code>APP_DEBUG=true</code>；<code>ExceptionHandler</code> 在 debug 下用真实异常消息覆盖对外文案（如 <code>Unable to open SQLite database: /path/...</code>），会暴露文件路径。该文件已被 .gitignore 忽略、未提交。',
+    impact:'机密性低（路径与内部状态）；前提是生产误用该 .env 或显式开启 debug。',
+    fix:'不改变默认逻辑（生产默认 false），在 .env.example 与 README 中强化说明。实测确认生产配置下所有错误响应均不含路径 / SQL / 堆栈。',
+    compat:'无。' },
+
+  { id:'SEC-011', sev:'low', title:'IP 匿名哈希使用库内随机盐', mod:'隐私', fixed:true,
+    why:'<code>sha256(ip + salt)</code>，盐存于同一数据库的 <code>app_meta</code> 表。库文件泄露时攻击者同时拿到盐，可离线枚举 IPv4 空间反推原始 IP——成本不低，但对定位特定地址段是可行的。',
+    impact:'机密性低（隐私去匿名化）。',
+    fix:'支持 <code>IP_HASH_SECRET</code>，设置后改用 <code>hash_hmac(\'sha256\', $ip, $secret)</code>，密钥不落库。顺带修复并发隐患：首次生成盐后<b>回读一次</b>，避免多进程（FPM）并发首请求各自生成不同盐，导致同一 IP 被计为多个访客。',
+    compat:'留空时行为与旧版一致，存量部署无感升级。注意：变更该值会使历史独立访客数从零重新累计。' },
+
+  { id:'SEC-013', sev:'info', title:'完整 Referer 长期落库', mod:'隐私', fixed:true,
+    why:'<code>short_url_clicks.referer</code> 保存来源 URL 前 500 字符，来源页可能把 token、一次性链接放在查询串中。而管理后台只用 <code>referer_host</code>，完整 Referer 从未被读取或展示。',
+    impact:'机密性低（第三方凭据可能被留存）。',
+    fix:'<code>ClickTracker</code> 增加 <code>$storeFullReferer</code>（来自 <code>PRIVACY_STORE_REFERER</code>），默认 <code>referer = NULL</code>，<code>referer_host</code> 照常保存。',
+    compat:'列保留（不删列，避免存量库结构变更），仅默认写入 NULL；需要原始 Referer 时设 <code>PRIVACY_STORE_REFERER=true</code> 恢复旧行为。' },
+
+  { id:'SEC-014', sev:'info', title:'Nginx 未显式传递 HTTP_HOST', mod:'Nginx 配置', fixed:true,
+    why:'<code>fastcgi_params</code> 通常已含 <code>HTTP_HOST $http_host</code>，但新增的 CSRF 同源判定以 Host 为基准，显式声明更稳妥；若代理层传递了错误的 Host，同源判定会失准（表现为合法请求被 403，而非安全绕过）。',
+    impact:'无直接安全影响（属稳健性）。',
+    fix:'三个 Nginx 配置均显式加 <code>fastcgi_param HTTP_HOST $http_host;</code>。' },
+
+  { id:'SEC-015', sev:'info', title:'Docker 镜像未预建 storage 目录', mod:'Docker', fixed:true,
+    why:'php-fpm 镜像默认以 <code>www-data</code> 运行，而 <code>/app/backend</code> 由 root 拷入且不含 <code>storage/</code>。首次请求尝试建目录会失败并抛 <code>StorageException</code>（503）。命名卷挂载会掩盖该问题，但未挂载卷的 <code>docker run</code> 场景会直接失败。',
+    impact:'可用性（首次启动即不可用）。',
+    fix:'镜像内预建 <code>storage/logs</code>，属主设为 <code>www-data</code>、权限 775；命名卷挂载到该路径时继承属主。',
+    compat:'无。',
+    note:'本机无 Docker 环境，此为静态审阅结论，标记为 Potential。' },
+
+  { id:'SEC-016', sev:'info', title:'docker-compose 内置默认密码且不可覆盖', mod:'部署配置', fixed:true,
+    why:'<code>ADMIN_PASSWORD: "admin123"</code> 硬编码在 compose 中，无法通过 .env 覆盖，容易随部署直接进入生产。',
+    impact:'机密性（弱口令随部署上线）。',
+    fix:'改为 <code>${ADMIN_PASSWORD:-admin123}</code> 形式，支持从项目根 .env 或环境变量注入；同时支持 <code>ADMIN_PASSWORD_HASH</code>、<code>IP_HASH_SECRET</code>、<code>ALLOWED_ORIGINS</code>、<code>HSTS_MAX_AGE</code> 注入，并保留「生产必须修改」注释。',
+    compat:'默认值仍为 admin123（便于本地试用），生产需显式注入。' },
+
+  { id:'SEC-012', sev:'info', title:'依赖审计：npm 7 项告警均在构建期工具链', mod:'依赖', fixed:false,
+    why:'<code>npm audit</code> 报告 7 项（5 High / 2 Moderate），全部来自 <code>tailwindcss → chokidar / braces / micromatch / fast-glob / postcss-nested</code>。PHP 侧 composer.lock 的运行时（packages）条目数为 <b>0</b>，即无任何第三方运行时依赖。',
+    impact:'无实际影响。匹配 <code>dist/assets/*.js</code> 命中数为 0；这些包仅在构建期用于 glob/watch 与 CSS 解析。',
+    fix:'<b>判定为不修复。</b> 修复方案要求 tailwindcss@4 破坏性大版本升级，而告警均不可达；为消除不可达告警引入样式系统重构风险不划算。已在审计报告记录判定依据。',
+    compat:'—' }
+];
+
+const SCORES = [
+  { name:'认证安全', v:9,  note:'bcrypt 哈希 · 256 位随机 token · 库存哈希 · 改密撤销全部会话' },
+  { name:'授权安全', v:10, note:'12 个管理接口逐一实测未登录一律 401' },
+  { name:'API 安全', v:9,  note:'Key 仅存 SHA-256 · 重置/删除即时失效 · 双鉴权头' },
+  { name:'数据安全', v:9,  note:'库在 Web 根外 · WAL · 写操作事务化' },
+  { name:'输入验证', v:9,  note:'协议白名单 · CRLF 拒绝 · 长度上限 · LIKE 转义' },
+  { name:'业务逻辑', v:9,  note:'改密失效 · 短码迁移 · 并发无重复' },
+  { name:'前端安全', v:9,  note:'无 XSS sink · 凭据不落存储 · CSP 实测通过' },
+  { name:'部署安全', v:8,  note:'三套 Nginx 加固 · Docker 目录归属（未运行验证）' },
+  { name:'依赖安全', v:9,  note:'PHP 运行时零依赖 · npm 生产 0 漏洞' },
+  { name:'隐私安全', v:9,  note:'HMAC 匿名 IP · Referer 默认不落库' }
+];
+
+const SUITES = [
+  { name:'Unit 单元',     n:45, pct:26 },
+  { name:'Feature 功能',  n:67, pct:39 },
+  { name:'Security 安全', n:60, pct:35 },
+  { name:'Compat 兼容',   n:0,  pct:0 }
+];
+
+const TOOLS = [
+  { cmd:'composer test',        res:'OK（172 tests, 479 assertions）',   ok:true },
+  { cmd:'composer analyse',     res:'PHPStan level 8 · No errors',       ok:true },
+  { cmd:'composer lint',        res:'php-cs-fixer · 0 of 73 files',      ok:true },
+  { cmd:'composer audit',       res:'运行时依赖 0 条 · 无适用漏洞',        ok:true },
+  { cmd:'npm audit --omit=dev', res:'found 0 vulnerabilities',           ok:true },
+  { cmd:'npm audit',            res:'7 项告警（5 High）· 均不可达',        ok:true },
+  { cmd:'npm run build',        res:'成功 · 189.50 kB JS · 无 source map', ok:true },
+  { cmd:'实际渗透复测',           res:'21 项检查全部 PASS',                ok:true },
+  { cmd:'浏览器 CSP 复核',        res:'首页 + 管理后台功能完整 · 无违规',    ok:true }
+];
+
+const SURFACE = [
+  ['创建短链','/url','POST','视配置','url','中','200（同源）'],
+  ['创建短链别名','/api/url','POST','视配置','url','中','401'],
+  ['开放 API','/api/open/shorten','POST','API Key','url','中','401'],
+  ['短链跳转','/{code}','GET','否','code','中','404'],
+  ['登录','/api/auth/login','POST','否','username, password','高','401'],
+  ['会话查询','/api/auth/me','GET','否','—','低','200'],
+  ['管理面板','/admin','GET','否（页面）','—','低','200'],
+  ['概览统计','/api/admin/overview','GET','是','—','高','401'],
+  ['短链列表','/api/admin/links','GET','是','page, per_page, q','高','401'],
+  ['编辑短链','/api/admin/links/{code}','PUT','是','code, url','高','401'],
+  ['删除短链','/api/admin/links/{code}','DELETE','是','—','高','401'],
+  ['单链统计','/api/admin/links/{code}/stats','GET','是','—','中','401'],
+  ['读取设置','/api/admin/settings','GET','是','—','中','401'],
+  ['修改设置','/api/admin/settings','PUT','是','三个开关','高','401'],
+  ['修改密码','/api/admin/settings/password','POST','是','当前/新密码','高','401'],
+  ['Key 列表','/api/admin/keys','GET','是','—','中','401'],
+  ['创建 Key','/api/admin/keys','POST','是','name','高','401'],
+  ['重置 Key','/api/admin/keys/{id}/reset','POST','是','—','高','401'],
+  ['删除 Key','/api/admin/keys/{id}','DELETE','是','—','中','401']
+];
+
+const COMPARE = {
+  cmpTraversal: { head:['Payload','修复前','修复后'], rows:[
+    ['/../.env',                                     {c:200, t:'88 B · 输出配置'}, {c:404, t:'无泄露'}],
+    ['/%2e%2e/.env',                                 {c:200, t:'88 B · 同左'},     {c:404, t:'无泄露'}],
+    ['/..%2f.env',                                   {c:200, t:'88 B · 同左'},     {c:404, t:'无泄露'}],
+    ['/../backend/storage/short-url.sqlite3',         {c:200, t:'64 KB · SQLite'},  {c:404, t:'无泄露'}],
+    ['/../backend/app/Services/AuthService.php',      {c:200, t:'6.4 KB · 源码'},   {c:404, t:'无泄露'}],
+    ['/../backend/composer.lock',                     {c:200, t:'160 KB'},          {c:404, t:'无泄露'}],
+    ['/../.git/config',                               {c:200, t:'309 B'},           {c:404, t:'无泄露'}]
+  ]},
+  cmpCsrf: { head:['场景','修复前','修复后'], rows:[
+    ['跨站 Origin + JSON',        {c:200, t:'Key 被创建'}, {c:403, t:'拒绝'}],
+    ['跨站 text/plain 简单表单',  {c:200, t:'Key 被创建'}, {c:403, t:'拒绝'}],
+    ['跨站 Referer，无 Origin',   {c:200, t:'放行'},       {c:403, t:'拒绝'}],
+    ['Origin: null',             {c:200, t:'放行'},       {c:403, t:'拒绝'}],
+    ['跨站 DELETE 短链',          {c:200, t:'删除成功'},   {c:403, t:'拒绝'}],
+    ['同源（正常前端）',           {c:200, t:'放行'},       {c:200, t:'放行'}],
+    ['X-API-Key 无 Origin',      {c:200, t:'放行'},       {c:200, t:'放行（例外）'}]
+  ]},
+  cmpSize: { head:['Payload','修复前','修复后'], rows:[
+    ['URL 1024 B',        {c:200, t:'入库'},           {c:200, t:'正常'}],
+    ['URL 2048 B',        {c:200, t:'入库'},           {c:200, t:'边界可用'}],
+    ['URL 4096 B',        {c:200, t:'入库'},           {c:413, t:'拒绝'}],
+    ['URL 102400 B',      {c:200, t:'入库'},           {c:413, t:'拒绝'}],
+    ['URL 1048576 B',     {c:200, t:'入库 · 1.10 s'},  {c:413, t:'拒绝'}],
+    ['请求体 2 MB 垃圾',   {c:400, t:'1.15 s'},        {c:413, t:'拒绝'}]
+  ]},
+  cmpIp: { head:['观测项','修复前','修复后'], rows:[
+    ['限流桶 ip_hash',   {c:200, t:'anonymous（共享）'}, {c:403, t:'真实 IP 哈希'}],
+    ['跳转 ip_hash',     {c:200, t:'NULL'},             {c:403, t:'真实哈希'}],
+    ['独立访客统计',      {c:200, t:'恒为 0'},            {c:403, t:'正常计数'}],
+    ['换 XFF 绕过限流',  {c:200, t:'可绕过（共享桶）'},    {c:403, t:'不可绕过'}]
+  ]},
+  cmpRate: { head:['场景','修复前','修复后'], rows:[
+    ['65 次连续创建',      {c:200, t:'65 × 200'},          {c:429, t:'56 × 200 + 9 × 429'}],
+    ['不同 IP 配额',       {c:200, t:'无限制'},             {c:403, t:'独立不共享'}],
+    ['开放 API 限流',      {c:200, t:'无限制'},             {c:403, t:'同样受限'}],
+    ['并发计数正确性',      {c:200, t:'—'},                 {c:403, t:'10 并发 → fails=5'}]
+  ]}
+};
+
+/* ================= 渲染 =================
+   各区块独立渲染（safe 包裹），单个节点异常不会中断后续区块。 */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safe = (name, fn) => { try { fn(); } catch (e) { console.error('[report] ' + name + ' 渲染失败:', e); } };
+/* 数值同步写入，不依赖 requestAnimationFrame：
+   后台标签页/未合成时 rAF 可能完全不触发，若把最终值放在回调里会显示为 0。
+   过渡动画交给 CSS transition 处理。 */
+
+/* --- 甜甜圈 --- */
+safe('donut', function donut() {
+  const counts = { high:0, medium:0, low:0, info:0 };
+  FINDINGS.forEach(f => counts[f.sev]++);
+  const total = FINDINGS.length;
+  const order = ['high','medium','low','info'];
+  let acc = 0;
+
+  order.forEach(k => {
+    const seg = $(`.seg[data-seg="${k}"]`);
+    if (!seg) return;
+    const len = counts[k] / total * 100;
+    seg.setAttribute('stroke-dasharray', `${len} ${100 - len}`);
+    seg.setAttribute('stroke-dashoffset', String(-acc));
+    acc += len;
+  });
+
+  const labels = { high:'High 高危', medium:'Medium 中危', low:'Low 低危', info:'Info 信息/已修复' };
+  const legend = $('#dlegend');
+  if (legend) {
+    legend.innerHTML = order.map(k => `
+      <div class="row" data-sev="${k}">
+        <span class="dot" style="background:${SEV_META[k].color}"></span>
+        <span>${labels[k]}</span>
+        <span class="cnt ${counts[k] ? '' : 'zero'}">${counts[k]}</span>
+      </div>`).join('');
+  }
+});
+
+/* --- 评分环 --- */
+safe('gauge', function gauge() {
+  const total = SCORES.reduce((a, s) => a + s.v, 0);
+  const avg = Math.round(total / SCORES.length * 10);   // 9.0 -> 90
+  const val = $('#gaugeVal');
+  if (val) val.setAttribute('stroke-dasharray', `${avg} ${100 - avg}`);
+
+  const numEl = $('#gaugeNum');
+  if (numEl) numEl.textContent = String(avg);
+
+  const bars = $('#scoreBars');
+  if (bars) {
+    bars.innerHTML = SCORES.map(s => {
+      const cls = s.v >= 9 ? 'good' : (s.v >= 7 ? 'mid' : '');
+      return `<div class="bar-row" title="${esc(s.note)}">
+        <span class="bl">${esc(s.name)}</span>
+        <span class="bar-track"><span class="bar-fill ${cls}" style="width:0" data-w="${s.v * 10}"></span></span>
+        <span class="bv">${s.v}/10</span>
+      </div>`;
+    }).join('');
+    $$('#scoreBars .bar-fill').forEach(el => { el.style.width = el.dataset.w + '%'; });
+  }
+});
+
+/* --- 漏洞列表 --- */
+function findingHTML(f, idx) {
+  const meta = SEV_META[f.sev];
+  const status = f.fixed
+    ? '<span class="badge b-fixed">✓ 已修复</span>'
+    : '<span class="badge b-na">无需修复</span>';
+  const note = f.note ? `<p style="margin-top:10px;color:var(--text-3);font-size:12.5px">⚠ ${esc(f.note)}</p>` : '';
+  const code = f.code ? `<h4>代码变化</h4><pre><code>${esc(f.code)}</code></pre>` : '';
+  const compat = f.compat && f.compat !== '—' ? `<h4>兼容性影响</h4><p>${f.compat}</p>` : '';
+
+  return `<article class="finding" data-sev="${f.sev}" data-id="${f.id}" data-search="${esc((f.id+' '+f.title+' '+f.mod+' '+f.why+' '+f.impact).replace(/<[^>]+>/g,' ').toLowerCase())}">
+    <div class="f-head">
+      <span class="fid">${f.id}</span>
+      <span class="badge ${meta.cls}">${meta.label}</span>
+      <span class="ft">${esc(f.title)}</span>
+      <span class="fmod">${esc(f.mod)}</span>
+      ${status}
+      <span class="arrow">▶</span>
+    </div>
+    <div class="f-body">
+      <h4>漏洞描述</h4><p>${f.why}</p>
+      <h4>影响</h4><p>${f.impact}</p>
+      <h4>修复方案</h4><p>${f.fix}</p>
+      ${code}
+      ${compat}
+      ${note}
+    </div>
+  </article>`;
+}
+
+safe('findings', function renderFindings() {
+  const host = $('#findings');
+  if (!host) return;
+  host.innerHTML = FINDINGS.map(findingHTML).join('');
+
+  host.addEventListener('click', e => {
+    const head = e.target.closest('.f-head');
+    if (!head) return;
+    head.parentElement.classList.toggle('open');
+  });
+
+  // 默认展开 2 个 High 条目，便于直接阅读最严重问题
+  $$('.finding[data-sev="high"]', host).forEach(el => el.classList.add('open'));
+});
+
+/* --- 筛选与搜索 --- */
+safe('filter', function filter() {
+  const host = $('#findings');
+  const empty = $('#empty');
+  const qInput = $('#q');
+  if (!host) return;
+  const cards = $$('.finding', host);
+  let sev = 'all', q = '';
+
+  function apply() {
+    let shown = 0;
+    cards.forEach(c => {
+      const okSev = sev === 'all' || c.dataset.sev === sev;
+      const okQ = !q || c.dataset.search.includes(q);
+      const vis = okSev && okQ;
+      c.style.display = vis ? '' : 'none';
+      if (vis) shown++;
+    });
+    if (empty) empty.style.display = shown ? 'none' : 'block';
+  }
+
+  $$('.chip[data-filter]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      $$('.chip[data-filter]').forEach(c => c.classList.remove('on'));
+      chip.classList.add('on');
+      sev = chip.dataset.filter;
+      apply();
+    });
+  });
+
+  if (qInput) {
+    qInput.addEventListener('input', e => {
+      q = e.target.value.trim().toLowerCase();
+      apply();
+    });
+  }
+
+  // 点击甜甜圈图例联动筛选
+  $$('#dlegend .row').forEach(row => {
+    row.addEventListener('click', () => {
+      const chip = $(`.chip[data-filter="${row.dataset.sev}"]`);
+      if (chip) chip.click();
+      location.hash = '#findings-section';
+    });
+  });
+});
+
+/* --- 对比表 --- */
+function statusCell(s, kind) {
+  const cls = kind === 'now' ? `p-${s.c}` : 'p-bad';
+  const barCls = kind === 'now' ? 'ok' : '';
+  const width = kind === 'now' ? 100 : 22;
+  return `<span class="st ${kind}">
+    <span class="pill ${cls}">${s.c}</span>
+    <span class="mini-bar ${barCls}"><i style="width:${width}%"></i></span>
+    <span style="font-size:12px;color:var(--text-3);min-width:0">${esc(s.t)}</span>
+  </span>`;
+}
+
+Object.entries(COMPARE).forEach(([id, data]) => safe('compare:' + id, () => {
+  const host = document.getElementById(id);
+  if (!host) return;
+  host.innerHTML =
+    `<div class="cmp-row head"><span>${data.head[0]}</span><span>${data.head[1]}</span><span>${data.head[2]}</span></div>` +
+    data.rows.map(([label, before, after]) =>
+      `<div class="cmp-row">
+        <span class="pl">${esc(label)}</span>
+        ${statusCell(before, 'then')}
+        ${statusCell(after, 'now')}
+      </div>`).join('');
+}));
+
+/* --- 攻击面表 --- */
+safe('surface', () => {
+  const body = $('#surfaceBody');
+  if (!body) return;
+  body.innerHTML = SURFACE.map(([mod, ep, m, auth, input, risk, test]) => {
+    const riskCls = risk === '高' ? 'b-high' : (risk === '中' ? 'b-medium' : 'b-low');
+    const authCls = auth === '是' ? 'b-fixed' : (auth.includes('API') ? 'b-medium' : 'b-info');
+    const testCls = test === '200（同源）' || test === '200' ? 'p-200' : `p-${test}`;
+    return `<tr>
+      <td>${esc(mod)}</td>
+      <td class="mono">${esc(ep)}</td>
+      <td class="mono">${esc(m)}</td>
+      <td><span class="badge ${authCls}">${esc(auth)}</span></td>
+      <td class="mono" style="font-size:12px">${esc(input)}</td>
+      <td><span class="badge ${riskCls}">${esc(risk)}</span></td>
+      <td><span class="pill ${testCls}">${esc(test)}</span></td>
+    </tr>`;
+  }).join('');
+});
+
+/* --- 工具链表 --- */
+safe('tools', () => {
+  const body = $('#toolBody');
+  if (!body) return;
+  body.innerHTML = TOOLS.map(t => `<tr>
+    <td class="mono">${esc(t.cmd)}</td>
+    <td style="color:var(--text-2)">${esc(t.res)}</td>
+    <td><span class="badge b-fixed">✓ 通过</span></td>
+  </tr>`).join('');
+});
+
+/* --- 测试套件条 --- */
+safe('suites', () => {
+  const host = $('#suiteBars');
+  if (!host) return;
+  host.innerHTML = SUITES.map(s => `<div class="bar-row">
+    <span class="bl">${esc(s.name)}</span>
+    <span class="bar-track"><span class="bar-fill good" style="width:0" data-w="${s.pct}"></span></span>
+    <span class="bv">${s.n}</span>
+  </div>`).join('');
+  $$('#suiteBars .bar-fill').forEach(el => { el.style.width = el.dataset.w + '%'; });
+});
+
+/* --- 主题切换 --- */
+(function theme() {
+  const KEY = 'devr-security-report-theme';
+  const root = document.documentElement;
+  let saved = null;
+  try { saved = localStorage.getItem(KEY); } catch (e) {}
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = saved || (prefersDark ? 'dark' : 'light');
+
+  $('#themeBtn').addEventListener('click', () => {
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem(KEY, next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

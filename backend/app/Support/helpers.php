@@ -39,3 +39,28 @@ if (!function_exists(__NAMESPACE__.'\env_int')) {
         return (int) $value;
     }
 }
+
+if (!function_exists(__NAMESPACE__.'\env_list')) {
+    /**
+     * 读取逗号分隔的环境变量为字符串列表（去空白、丢弃空项）。
+     *
+     * @return list<string>
+     */
+    function env_list(string $key): array
+    {
+        $value = env($key);
+        if ($value === null) {
+            return [];
+        }
+
+        $items = [];
+        foreach (explode(',', $value) as $item) {
+            $item = trim($item);
+            if ($item !== '') {
+                $items[] = $item;
+            }
+        }
+
+        return $items;
+    }
+}
