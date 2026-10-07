@@ -20,7 +20,7 @@ Demo 地址 👉 [u.hecady.com](https://u.hecady.com)
 - **短链生成**：62 进制乱序编码短码，支持批量复制、逐条复制、下载二维码（前端生成）；
 - **永久跳转**：短码 302 跳转到原链接，数据存 SQLite 单文件，不依赖外部服务；
 - **亮/暗双主题**：默认跟随系统偏好，可在页头手动切换并记忆（localStorage 持久化，首帧应用主题无白屏闪烁）；
-- **管理后台**（`/admin`）：单管理员登录、全站概览与近 14 天趋势、点击 Top 10、单链统计
+- **管理后台**（`/admin`）：单管理员登录、全站概览与趋势（日/周/月/年四种粒度）、点击 Top 10、单链统计
   （独立访客 / 来源域名 / 设备分布）、短链编辑与删除、运行时设置、后台改密；
 - **开放 API**：在后台「设置」页创建 API Key 后，外部程序可经 `POST /api/open/shorten`
   程序化创建短链（Bearer / X-API-Key 鉴权，明文 Key 仅创建时展示一次）；
@@ -34,7 +34,8 @@ Demo 地址 👉 [u.hecady.com](https://u.hecady.com)
 ## 架构
 
 ```text
-Vue 3 前端（src/，Vite 构建，含 /admin 管理面板）
+Vue 3 前端（src/，Vite 构建，含 /admin 管理面板；端口 3000）
+    ｜  另一套可选前端：apple-frontend/（Apple 设计语言，共用同一后端；端口 3100）
     ↓ HTTP（VITE_API_BASE_URL，留空同源）
 Nginx（静态资源 /，其余转发）
     ↓ FastCGI
@@ -43,6 +44,21 @@ PHP 8.2 API（backend/，Controller → Service → Repository）
 SQLite（backend/storage/short-url.sqlite3，单文件永久化，WAL 模式）
                                 Memcached（本机或独立容器；不可用时自动降级为直连 SQLite）
 ```
+
+## 两套前端
+
+仓库内含两套共用同一后端与数据库的前端，可并行运行对照：
+
+| | 主前端（默认） | Apple 设计语言前端 |
+| --- | --- | --- |
+| 目录 | `src/` | `apple-frontend/` |
+| 开发 | `npm run dev`（端口 3000） | `npm run dev:apple`（端口 3100） |
+| 构建 | `npm run build` → `dist/` | `npm run build:apple` → `dist-apple/` |
+| 说明 | 本 README 其余部分 | [apple-frontend/README.md](apple-frontend/README.md) |
+
+Apple 前端按 Apple 设计原则（弹簧动效、跟手 Sheet、分段控件滑动等）重写交互，
+配色令牌与原前端逐值一致（`npm run verify:tokens` 可断言）。部署时二选一或并存均可，
+Nginx 指向对应构建产物即可。
 
 ## 环境依赖
 
@@ -76,7 +92,7 @@ npm run dev
 访问 `/admin` 进入管理面板（首页页头也有入口），支持：
 
 - **登录**：单管理员账号，凭据由环境变量配置；登录态为 HttpOnly + SameSite=Strict Cookie，有效期默认 7 天；
-- **统计**：全站概览（短链总数/累计/今日点击）、近 14 天趋势、点击 Top 10；单链维度含独立访客、来源域名 Top 10、设备分布（统计按 UTC 日切分）；
+- **统计**：全站概览（短链总数/累计/今日点击）、趋势（日/周/月/年可切换）、点击 Top 10；单链维度含独立访客、来源域名 Top 10、设备分布（统计按 UTC 口径聚合）；
 - **编辑**：修改目标链接与短码（改短码后旧码立即失效，点击统计自动迁移）；
 - **删除**：删除短链并级联清除点击记录。
 
@@ -270,17 +286,19 @@ short-url/
 │   ├── views/             # AdminPage.vue 管理面板页
 │   ├── stores/            # Pinia 状态（shortUrl.js）
 │   └── services/          # API 封装（entity.js）
-├── public/                # 前端静态资源（favicon、manifest 等）
+├── apple-frontend/        # Apple 设计语言前端（独立 Vite 配置，共用同一后端）
+│   └── src/               # motion/（弹簧引擎）/ styles/（设计令牌）/ components / home / admin
+├── public/                # 主前端静态资源（favicon、manifest 等）
 ├── deploy/
 │   ├── nginx/             # 通用(宝塔) / docker 单容器 / compose 三种 Nginx 配置
 │   ├── baota/             # 开箱即用部署包的伪静态、public 骨架与部署说明
 │   ├── build-baota-package.php  # 打包脚本（生成 baota-package/ 与单文件 baota-package.zip）
-│   └── supervisord.conf   # 单容器进程托管
+│   └── supervisord.conf   # 单容器进程托管（nginx + php-fpm + memcached）
 ├── tools/
 │   └── generate-icons.mjs # 站点图标生成脚本（node tools/generate-icons.mjs 重制 favicon.ico / logo100.png）
 ├── docs/                  # API / 迁移 / 宝塔部署等文档
-├── Dockerfile             # 多阶段构建（默认：nginx+php-fpm 单容器；--target app/web 供 compose 用）
-└── docker-compose.yml     # 双容器部署（web + app）
+├── Dockerfile             # 多阶段构建（默认：nginx+php-fpm+memcached 单容器；--target app/web 供 compose 用）
+└── docker-compose.yml     # 三容器部署（web + app + memcached）
 ```
 
 ## License

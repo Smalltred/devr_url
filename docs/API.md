@@ -178,20 +178,25 @@ GET /api/auth/me
 ### 全站概览
 
 ```http
-GET /api/admin/overview
+GET /api/admin/overview?period=day
 ```
+
+- `period` 为趋势粒度，可选 `day` / `week` / `month` / `year`（默认 `day`；非法值回落为 `day`）；
+  对应桶数约为 14 天 / 12 周 / 12 个月 / 5 年。
 
 ```json
 {
     "links": 12,
     "total_clicks": 345,
     "clicks_today": 21,
+    "period": "day",
     "daily": [{"date": "2026-09-22", "clicks": 0}, {"date": "2026-10-05", "clicks": 18}],
     "top_links": [{"code": "SB", "url": "https://example.com", "clicks": 120}]
 }
 ```
 
-`daily` 为近 14 天（UTC 日切）全站点击，缺失日期补零。
+`daily` 为按 `period` 聚合的全站点击数（UTC 口径），缺失桶补零：日粒度近 14 天；
+周粒度近 12 周（周一为桶起点）；月粒度近 12 个月；年粒度近 5 年。
 
 ### 短链分页列表
 
@@ -245,8 +250,10 @@ DELETE /api/admin/links/{code}
 ### 单链统计
 
 ```http
-GET /api/admin/links/{code}/stats
+GET /api/admin/links/{code}/stats?period=day
 ```
+
+- `period` 与全站概览一致（`day` / `week` / `month` / `year`，默认 `day`）。
 
 ```json
 {
@@ -255,6 +262,7 @@ GET /api/admin/links/{code}/stats
     "total_clicks": 120,
     "clicks_today": 9,
     "visitors": 87,
+    "period": "day",
     "daily": [{"date": "2026-09-22", "clicks": 0}],
     "referers": [{"referer_host": "google.com", "clicks": 66}],
     "devices": {"mobile": 52, "desktop": 68}
