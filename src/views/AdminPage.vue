@@ -31,6 +31,9 @@ const statsCode = ref('')
 const pendingDelete = ref(null)
 // 退出登录请求进行中：按钮转 spinner 防重复提交
 const loggingOut = ref(false)
+// 首页对未登录用户是否可访问：开启「创建短链需要登录」后为 false，
+// 用于在登录页隐藏「返回首页」（否则往返循环）
+const homeAccessible = ref(true)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
 
@@ -38,6 +41,8 @@ onMounted(async () => {
     try {
         const state = await api.me()
         authState.value = state.authenticated ? 'ready' : 'login'
+        // 未开启「创建短链需要登录」时，首页对任何人开放，登录页仍可返回首页
+        homeAccessible.value = !state.require_login
     } catch {
         authState.value = 'login'
     }
@@ -70,6 +75,13 @@ async function onLoggedOut() {
         // 列表数据一并清空，避免重新登录后短暂显示上一会话的数据
         items.value = []
         total.value = 0
+        // 本会话内可能刚改过「创建短链需要登录」，重新读取以正确决定是否显示「返回首页」
+        try {
+            const state = await api.me()
+            homeAccessible.value = !state.require_login
+        } catch {
+            // 查询失败保持原值，不影响登录页可用
+        }
     }
 }
 
@@ -160,7 +172,13 @@ function showNotice(message) {
 <template>
     <div class="mx-auto min-h-screen max-w-6xl px-5 sm:px-8">
         <!-- 后台各状态进入时播放 page-in 动画（keyframes 实现，避免过渡类滞留导致内容不可见） -->
-        <AdminLogin v-if="authState === 'login'" key="login" class="page-in" @logged-in="onLoggedIn" />
+        <AdminLogin
+            v-if="authState === 'login'"
+            key="login"
+            class="page-in"
+            :home-accessible="homeAccessible"
+            @logged-in="onLoggedIn"
+        />
 
         <div
             v-else-if="authState === 'checking'"

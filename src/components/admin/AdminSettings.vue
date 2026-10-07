@@ -1,17 +1,18 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onUnmounted, onMounted, ref } from 'vue'
 import copy from 'copy-to-clipboard'
 import api from '../../services/entity'
 
 const emit = defineEmits(['password-changed', 'notice'])
 
-// 短链设置
+// 短链设置（改动即自动保存，无保存按钮）
 const codeMinLength = ref(1)
 const codeRandom = ref(false)
 const requireLogin = ref(false)
 const passwordSource = ref('env')
 const settingsError = ref('')
 const savingSettings = ref(false)
+const settingsSaved = ref(false)
 
 // 缓存
 const cacheTtl = ref(300)
@@ -32,6 +33,17 @@ const freshKey = ref(null) // {id, name, key} 明文仅此一次展示
 const keysError = ref('')
 const creatingKey = ref(false)
 
+// 自动保存：数字输入防抖（逐字符输入只发一次请求），下拉/开关与失焦立即提交
+const SETTINGS_DEBOUNCE_MS = 600
+let settingsTimer = null
+let savedFlashTimer = null
+// 请求序号：并发改动时只采纳最后一次响应，避免旧响应覆盖新状态
+let saveSeq = 0
+// 最近一次已提交的载荷：在发请求前登记、失败时清除。
+// 同一载荷不重复提交——数字框会先后触发 input 与 change（顺序不定），
+// 失焦、开关等时机也可能与防抖定时器重叠。
+let lastSubmittedPayload = null
+
 onMounted(async () => {
     try {
         applySettings(await api.fetchSettings())
@@ -39,6 +51,11 @@ onMounted(async () => {
         settingsError.value = err.response?.data?.error || err.message || '设置加载失败'
     }
     await loadKeys()
+})
+
+onUnmounted(() => {
+    if (settingsTimer) clearTimeout(settingsTimer)
+    if (savedFlashTimer) clearTimeout(savedFlashTimer)
 })
 
 function applySettings(data) {
@@ -49,6 +66,23 @@ function applySettings(data) {
     cacheTtl.value = data.cache_ttl ?? 300
     cacheNegativeTtl.value = data.cache_negative_ttl ?? 30
     cacheStatus.value = data.cache || null
+    // 服务端基线：此后与之一致的触发（失焦、重复事件）不再提交
+    lastSubmittedPayload = canonicalPayload(data)
+}
+
+/**
+ * 从服务端设置视图提取规范化载荷（用于比对，字段与提交体一致）。
+ *
+ * @param {object} data
+ */
+function canonicalPayload(data) {
+    return {
+        code_min_length: data.code_min_length,
+        code_random: Boolean(data.code_random),
+        require_login: Boolean(data.require_login),
+        cache_ttl: data.cache_ttl ?? 300,
+        cache_negative_ttl: data.cache_negative_ttl ?? 30,
+    }
 }
 
 async function loadKeys() {
@@ -59,34 +93,211 @@ async function loadKeys() {
     }
 }
 
-async function saveSettings() {
-    if (savingSettings.value) {
+/**
+ * 读取整数输入。返回 null 表示“尚未形成可用值”（空输入/非整数），
+ * 调用方据此跳过本次保存而不报错，避免用户改写过程中弹出校验提示。
+ */
+function readInt(value) {
+    const text = String(value).trim()
+    if (text === '') {
+        return null
+    }
+    const parsed = Number(text)
+
+    return Number.isInteger(parsed) ? parsed : null
+}
+
+/**
+ * 本地校验：不通过则不发请求，直接提示（与后端规则一致，省一次往返）。
+ *
+ * @returns {{payload: object|null, incomplete: boolean}} incomplete 为 true 表示输入未完成，静默跳过
+ */
+function validateSettings() {
+    const rawMinLength = String(codeMinLength.value).trim()
+    const rawTtl = String(cacheTtl.value).trim()
+    const rawNegativeTtl = String(cacheNegativeTtl.value).trim()
+    // 任一数字框正在改写（空值）时整体跳过，避免把半成品状态提交或被后端拒绝
+    if (rawMinLength === '' || rawTtl === '' || rawNegativeTtl === '') {
+        return { payload: null, incomplete: true }
+    }
+
+    const minLength = readInt(codeMinLength.value)
+    if (minLength === null || minLength < 1 || minLength > 16) {
+        settingsError.value = '短链最小长度需为 1-16 的整数'
+        return { payload: null, incomplete: false }
+    }
+
+    const ttl = readInt(cacheTtl.value)
+    if (ttl === null || ttl < 0 || ttl > 86400) {
+        settingsError.value = '缓存有效期需为 0-86400 秒的整数'
+        return { payload: null, incomplete: false }
+    }
+
+    const negativeTtl = readInt(cacheNegativeTtl.value)
+    if (negativeTtl === null || negativeTtl < 0 || negativeTtl > 3600) {
+        settingsError.value = '负缓存需为 0-3600 秒的整数'
+        return { payload: null, incomplete: false }
+    }
+
+    if (codeRandom.value && minLength < 3) {
+        settingsError.value = '开启随机短码后，短链最小长度至少为 3'
+        return { payload: null, incomplete: false }
+    }
+
+    settingsError.value = ''
+
+    return {
+        payload: {
+            code_min_length: minLength,
+            code_random: codeRandom.value,
+            require_login: requireLogin.value,
+            cache_ttl: ttl,
+            cache_negative_ttl: negativeTtl,
+        },
+        incomplete: false,
+    }
+}
+
+function scheduleSettingsSave() {
+    if (settingsTimer) {
+        clearTimeout(settingsTimer)
+    }
+    settingsTimer = setTimeout(() => {
+        settingsTimer = null
+        persistSettings()
+    }, SETTINGS_DEBOUNCE_MS)
+}
+
+// 失焦/回车等提交时机：取消防抖，立即保存
+function flushSettingsSave() {
+    if (settingsTimer) {
+        clearTimeout(settingsTimer)
+        settingsTimer = null
+    }
+
+    // 失焦时数字框仍为空（用户清空后离开）：不提交也不留空白，回填服务端当前值
+    if (hasEmptyNumberField()) {
+        settingsSaved.value = false
+        void restoreSettings()
         return
     }
-    settingsError.value = ''
+
+    persistSettings()
+}
+
+function hasEmptyNumberField() {
+    return (
+        String(codeMinLength.value).trim() === '' ||
+        String(cacheTtl.value).trim() === '' ||
+        String(cacheNegativeTtl.value).trim() === ''
+    )
+}
+
+/**
+ * 拉回服务端当前设置（用于放弃半成品输入）。
+ */
+async function restoreSettings() {
+    try {
+        applySettings(await api.fetchSettings())
+        settingsError.value = ''
+    } catch {
+        // 拉取失败保持现状
+    }
+}
+
+async function persistSettings() {
+    const { payload, incomplete } = validateSettings()
+    if (payload === null) {
+        // 输入未完成：静默跳过，但清掉可能残留的“已保存”提示以免误导
+        if (incomplete) {
+            settingsSaved.value = false
+        }
+        return
+    }
+
+    // 与该载荷一致（重复事件/仅失焦触发）：无需重复提交，保证提交幂等
+    if (lastSubmittedPayload !== null && isSameSettings(payload, lastSubmittedPayload)) {
+        return
+    }
+
+    const seq = ++saveSeq
+    // 请求发出前登记，使并发的重复触发直接跳过
+    lastSubmittedPayload = payload
     savingSettings.value = true
     try {
-        applySettings(
-            await api.updateSettings({
-                code_min_length: Number(codeMinLength.value),
-                code_random: codeRandom.value,
-                require_login: requireLogin.value,
-                cache_ttl: Number(cacheTtl.value),
-                cache_negative_ttl: Number(cacheNegativeTtl.value),
-            }),
-        )
-        emit('notice', '设置已保存')
+        const data = await api.updateSettings(payload)
+        if (seq === saveSeq) {
+            applySettings(data)
+            flashSaved()
+        }
     } catch (err) {
-        settingsError.value = err.response?.data?.error || err.message || '保存失败'
+        if (seq === saveSeq) {
+            // 失败后清除登记，允许用户重试同一载荷
+            lastSubmittedPayload = null
+            settingsError.value = err.response?.data?.error || err.message || '保存失败'
+            // 与后端对齐：拉回服务端状态，避免界面显示未生效的值
+            try {
+                applySettings(await api.fetchSettings())
+            } catch {
+                // 拉取失败则保持当前显示，错误提示已给出
+            }
+        }
     } finally {
-        savingSettings.value = false
+        if (seq === saveSeq) {
+            savingSettings.value = false
+        }
     }
+}
+
+/**
+ * 两个设置载荷是否等价（字段一致，数值按数字比较）。
+ *
+ * @param {object} a
+ * @param {object} b
+ */
+function isSameSettings(a, b) {
+    return (
+        a.code_min_length === b.code_min_length &&
+        a.code_random === b.code_random &&
+        a.require_login === b.require_login &&
+        a.cache_ttl === b.cache_ttl &&
+        a.cache_negative_ttl === b.cache_negative_ttl
+    )
+}
+
+function flashSaved() {
+    settingsSaved.value = true
+    if (savedFlashTimer) {
+        clearTimeout(savedFlashTimer)
+    }
+    savedFlashTimer = setTimeout(() => {
+        settingsSaved.value = false
+    }, 1800)
+}
+
+// 开关：本地校验不过就不切换（并说明原因），通过则立即保存
+function toggleCodeRandom() {
+    if (!codeRandom.value) {
+        const minLength = readInt(codeMinLength.value)
+        if (minLength === null || minLength < 3) {
+            settingsError.value = '开启随机短码后，短链最小长度至少为 3，请先调整长度'
+            return
+        }
+    }
+    codeRandom.value = !codeRandom.value
+    flushSettingsSave()
+}
+
+function toggleRequireLogin() {
+    requireLogin.value = !requireLogin.value
+    flushSettingsSave()
 }
 
 async function changePassword() {
     if (savingPassword.value) {
         return
     }
+
     passwordError.value = ''
     if (!currentPassword.value || !newPassword.value) {
         passwordError.value = '请填写当前密码与新密码'
@@ -186,7 +397,14 @@ function formatTime(value) {
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <!-- 短链与站点设置 -->
             <div class="glass card">
-                <h2 class="mb-6 text-lg font-semibold">站点设置</h2>
+                <div class="mb-6 flex items-center justify-between gap-3">
+                    <h2 class="text-lg font-semibold">站点设置</h2>
+                    <!-- 自动保存状态：保存中转圈，完成后短暂提示 -->
+                    <span class="flex items-center gap-1.5 text-xs text-ink-3" aria-live="polite">
+                        <span v-if="savingSettings" class="spinner" aria-hidden="true"></span>
+                        {{ savingSettings ? '保存中…' : settingsSaved ? '已保存' : '改动即自动保存' }}
+                    </span>
+                </div>
 
                 <div class="mb-5">
                     <label class="mb-1 block text-sm font-medium" for="setting-length">短链最小长度（1-16）</label>
@@ -198,6 +416,9 @@ function formatTime(value) {
                         min="1"
                         max="16"
                         class="input w-32"
+                        @input="scheduleSettingsSave"
+                        @change="flushSettingsSave"
+                        @blur="flushSettingsSave"
                     />
                 </div>
 
@@ -212,7 +433,7 @@ function formatTime(value) {
                         role="switch"
                         :aria-checked="codeRandom"
                         aria-label="随机短码"
-                        @click="codeRandom = !codeRandom"
+                        @click="toggleCodeRandom"
                     ></button>
                 </div>
 
@@ -227,7 +448,7 @@ function formatTime(value) {
                         role="switch"
                         :aria-checked="requireLogin"
                         aria-label="创建短链需要登录"
-                        @click="requireLogin = !requireLogin"
+                        @click="toggleRequireLogin"
                     ></button>
                 </div>
 
@@ -258,6 +479,9 @@ function formatTime(value) {
                                 min="0"
                                 max="86400"
                                 class="input w-full"
+                                @input="scheduleSettingsSave"
+                                @change="flushSettingsSave"
+                                @blur="flushSettingsSave"
                             />
                         </div>
                         <div>
@@ -269,6 +493,9 @@ function formatTime(value) {
                                 min="0"
                                 max="3600"
                                 class="input w-full"
+                                @input="scheduleSettingsSave"
+                                @change="flushSettingsSave"
+                                @blur="flushSettingsSave"
                             />
                         </div>
                     </div>
@@ -285,16 +512,7 @@ function formatTime(value) {
                     </p>
                 </div>
 
-                <p v-if="settingsError" class="mb-4 text-sm text-danger">{{ settingsError }}</p>
-
-                <button
-                    type="button"
-                    :disabled="savingSettings"
-                    class="btn btn-primary w-full sm:w-auto"
-                    @click="saveSettings"
-                >
-                    {{ savingSettings ? '保存中…' : '保存设置' }}
-                </button>
+                <p v-if="settingsError" class="text-sm text-danger">{{ settingsError }}</p>
             </div>
 
             <!-- 修改密码 -->

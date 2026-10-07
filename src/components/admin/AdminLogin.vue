@@ -4,6 +4,15 @@ import api from '../../services/entity'
 
 const emit = defineEmits(['logged-in'])
 
+// 首页是否对未登录用户开放。开启「创建短链需要登录」时为 false：
+// 此时首页会强制跳回登录页，必须隐藏「返回首页」入口，否则点击即形成往返循环。
+const props = defineProps({
+    homeAccessible: {
+        type: Boolean,
+        default: true,
+    },
+})
+
 const username = ref('')
 const password = ref('')
 const error = ref('')
@@ -69,7 +78,8 @@ const submit = async () => {
             </button>
 
             <p class="mt-6 text-center text-sm text-ink-3">
-                <a href="/" class="transition-colors hover:text-accent">← 返回首页</a>
+                <a v-if="props.homeAccessible" href="/" class="transition-colors hover:text-accent">← 返回首页</a>
+                <span v-else>本站已开启登录访问，首页对未登录用户不可见</span>
             </p>
         </form>
     </div>
