@@ -106,18 +106,27 @@ final class SqliteClickRepository implements ClickRepository
         });
     }
 
-    public function dailySeries(?string $code, int $days): array
+    /**
+     * 趋势聚合：按粒度把 clicked_at 归入桶。
+     * 桶起始日由 SQLite 的 strftime 计算（UTC 口径，与写入侧 datetime('now') 一致）：
+     *   day   → 当日；week → 本周一（weekday 0=周日，需回退 (weekday+6)%7 天）；month → 当月 1 日；year → 1 月 1 日。
+     *
+     * @param 'day'|'week'|'month'|'year' $period
+     */
+    public function series(?string $code, string $period, int $buckets): array
     {
-        return $this->database->execute(static function (PDO $pdo) use ($code, $days): array {
-            $sql = 'SELECT substr(clicked_at, 1, 10) AS date, COUNT(*) AS clicks FROM short_url_clicks
-                    WHERE clicked_at >= date(\'now\', :range)';
+        $bucketExpr = self::bucketExpression($period);
+        $rangeStart = self::rangeStartExpression($period, $buckets);
+
+        return $this->database->execute(static function (PDO $pdo) use ($code, $bucketExpr, $rangeStart): array {
+            $sql = 'SELECT '.$bucketExpr.' AS date, COUNT(*) AS clicks FROM short_url_clicks
+                    WHERE date(clicked_at) >= '.$rangeStart;
             if ($code !== null) {
                 $sql .= ' AND code = :code';
             }
             $sql .= ' GROUP BY date ORDER BY date ASC';
 
             $statement = $pdo->prepare($sql);
-            $statement->bindValue(':range', sprintf('-%d days', $days - 1), PDO::PARAM_STR);
             if ($code !== null) {
                 $statement->bindValue(':code', $code, PDO::PARAM_STR);
             }
@@ -136,6 +145,35 @@ final class SqliteClickRepository implements ClickRepository
 
             return $series;
         });
+    }
+
+    /**
+     * 桶起始日的 SQL 表达式（UTC）。
+     */
+    private static function bucketExpression(string $period): string
+    {
+        return match ($period) {
+            'week' => "date(clicked_at, '-' || ((cast(strftime('%w', clicked_at) as integer) + 6) % 7) || ' days')",
+            'month' => "date(clicked_at, 'start of month')",
+            'year' => "date(clicked_at, 'start of year')",
+            default => 'date(clicked_at)',
+        };
+    }
+
+    /**
+     * 统计起点（含）的 SQL 表达式：以当前桶为终点向前取 $buckets 个桶。
+     * 先对齐到当前桶起点再回退，保证窗口内恰好覆盖 $buckets 个完整桶。
+     */
+    private static function rangeStartExpression(string $period, int $buckets): string
+    {
+        $offset = max(1, $buckets) - 1;
+
+        return match ($period) {
+            'week' => "date('now', '-' || ((cast(strftime('%w','now') as integer) + 6) % 7) || ' days', '-".($offset * 7)." days')",
+            'month' => "date('now', 'start of month', '-".$offset." months')",
+            'year' => "date('now', 'start of year', '-".$offset." years')",
+            default => "date('now', '-".$offset." days')",
+        };
     }
 
     public function visitors(string $code): int

@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import api from '../../services/entity'
 import StatBars from './StatBars.vue'
+import PeriodSwitch from './PeriodSwitch.vue'
 
 const props = defineProps({
     code: {
@@ -14,14 +15,29 @@ const emit = defineEmits(['close'])
 
 const stats = ref(null)
 const error = ref('')
+const period = ref('day')
+const periodLoading = ref(false)
 
 onMounted(async () => {
     try {
-        stats.value = await api.fetchLinkStats(props.code)
+        stats.value = await api.fetchLinkStats(props.code, period.value)
     } catch (err) {
         error.value = err.response?.data?.error || err.message || '统计加载失败'
     }
 })
+
+// 切换粒度：只重拉当前短链的统计
+async function onPeriodChange(value) {
+    period.value = value
+    periodLoading.value = true
+    try {
+        stats.value = await api.fetchLinkStats(props.code, value)
+    } catch (err) {
+        error.value = err.response?.data?.error || err.message || '趋势加载失败'
+    } finally {
+        periodLoading.value = false
+    }
+}
 
 // Escape 关闭弹窗
 const onKeydown = e => {
@@ -67,8 +83,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                     </div>
                 </div>
 
-                <h3 class="mb-2 text-sm font-semibold">近 14 天趋势（UTC 日切）</h3>
-                <StatBars :series="stats.daily" class="mb-6" />
+                <h3 class="mb-2 text-sm font-semibold">点击趋势（UTC 口径）</h3>
+                <div class="mb-3">
+                    <PeriodSwitch :model-value="period" @update:model-value="onPeriodChange" />
+                </div>
+                <div :class="[periodLoading ? 'opacity-60' : '', 'mb-6 transition-opacity']">
+                    <StatBars :series="stats.daily" :period="stats.period || period" />
+                </div>
 
                 <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <div>

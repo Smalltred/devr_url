@@ -25,9 +25,9 @@ final class AdminController
     ) {
     }
 
-    public function overview(): Response
+    public function overview(Request $request): Response
     {
-        return Response::json($this->service->overview());
+        return Response::json($this->service->overview((string) ($request->queryParam('period') ?? 'day')));
     }
 
     public function links(Request $request): Response
@@ -55,7 +55,10 @@ final class AdminController
 
     public function stats(Request $request): Response
     {
-        return Response::json($this->service->linkStats($request->routeParam('code')));
+        return Response::json($this->service->linkStats(
+            $request->routeParam('code'),
+            (string) ($request->queryParam('period') ?? 'day'),
+        ));
     }
 
     public function settings(): Response

@@ -40,3 +40,6 @@ yarn-error.log*
 /.zcode/
 /.zcodeignore
 /baota-package.zip
+
+# 新前端构建产物
+/dist-apple/

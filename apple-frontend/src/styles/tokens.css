@@ -1,0 +1,192 @@
+/* ============================================================================
+   设计令牌 —— 配色逐值移植自旧前端 src/index.css
+   色相、明度、alpha 全部保持不变，仅做两件事：
+     1. 补齐旧系统里几处硬编码漏掉主题的令牌（见文件末尾“主题修正”）
+     2. 新增排版三元组与弹簧参数令牌（新设计语言需要，不改变任何配色）
+   ========================================================================== */
+
+:root {
+    /* ---- 表面与文本 ---- */
+    --color-bg: #f5f7fb;
+    --color-bg-elevated: #eef2f7;
+    --color-surface: rgba(255, 255, 255, 0.64);
+    --color-surface-solid: #ffffff;
+    --color-surface-hover: rgba(255, 255, 255, 0.78);
+    --color-text: #172033;
+    --color-text-secondary: #5f6b7a;
+    --color-text-tertiary: #8b95a3;
+    --color-text-disabled: #aeb6c1;
+
+    /* ---- 强调色与语义色 ---- */
+    --color-accent: #4f8ff7;
+    --color-accent-hover: #3b82f6;
+    --color-accent-soft: rgba(79, 143, 247, 0.12);
+    --color-success: #34a853;
+    --color-success-soft: rgba(52, 168, 83, 0.12);
+    --color-warning: #f59e0b;
+    --color-danger: #ef4444;
+    --color-danger-soft: rgba(239, 68, 68, 0.1);
+
+    /* ---- 玻璃材质 ---- */
+    --glass-bg: rgba(255, 255, 255, 0.64);
+    --glass-strong-bg: rgba(255, 255, 255, 0.78);
+    --glass-ctl-bg: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.68);
+    --glass-border-soft: rgba(148, 163, 184, 0.16);
+    --glass-blur: 24px;
+    --glass-blur-strong: 32px;
+
+    /* 材质顶部高光边：模拟光线打在玻璃上缘 */
+    --glass-highlight: rgba(255, 255, 255, 0.9);
+
+    /* ---- 阴影 ---- */
+    --shadow-sm: 0 4px 18px rgba(20, 32, 52, 0.055);
+    --shadow-md: 0 10px 32px rgba(20, 32, 52, 0.075);
+    --shadow-lg: 0 20px 60px rgba(20, 32, 52, 0.12);
+
+    /* ---- 圆角 ---- */
+    --radius-xs: 8px;
+    --radius-sm: 10px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+    --radius-xl: 26px;
+    --radius-2xl: 32px;
+    --radius-pill: 999px;
+
+    /* ---- 间距 ---- */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-7: 28px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    /* ---- 字体 ---- */
+    --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+
+    /* 字号阶梯（rem 基准 16px，随用户字号设置缩放） */
+    --text-xs: 0.75rem;
+    --text-sm: 0.8125rem;
+    --text-md: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.375rem;
+    --text-2xl: 1.75rem;
+    --text-3xl: 2.25rem;
+
+    /* 字距：随字号增大而收紧（负值），正文接近 0 —— Apple 的字距随字号变化原则 */
+    --tracking-3xl: -0.022em;
+    --tracking-2xl: -0.02em;
+    --tracking-xl: -0.017em;
+    --tracking-lg: -0.012em;
+    --tracking-base: -0.003em;
+    --tracking-sm: 0em;
+    --tracking-xs: 0.006em;
+    /* 全大写小标签需要正字距才易读 */
+    --tracking-caps: 0.06em;
+
+    /* 行高：随字号增大而收紧 */
+    --leading-3xl: 1.08;
+    --leading-2xl: 1.14;
+    --leading-xl: 1.22;
+    --leading-lg: 1.32;
+    --leading-base: 1.55;
+    --leading-sm: 1.5;
+
+    /* 字重 */
+    --weight-regular: 400;
+    --weight-medium: 500;
+    --weight-semibold: 600;
+    --weight-bold: 700;
+
+    /* ---- 弹簧参数（Apple 的 damping + response 心智模型） ----
+       不是时长：弹簧没有固定时长，稳定时间由参数涌现。
+       response 越低越灵敏。 */
+    --spring-response-snappy: 0.28s;
+    --spring-response-default: 0.35s;
+    --spring-response-gentle: 0.45s;
+    --spring-damping-default: 1; /* 临界阻尼，无过冲 —— UI 默认 */
+    --spring-damping-momentum: 0.8; /* 仅用于手势带惯性的场景 */
+
+    /* 纯交叉淡入的时长（减弱动效时替代位移动画） */
+    --duration-fade: 180ms;
+
+    /* 保留旧令牌名，便于旧代码思路对照 */
+    --duration-fast: 140ms;
+    --duration-normal: 220ms;
+    --duration-slow: 360ms;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* ---- 布局 ---- */
+    --content-max-width: 1440px;
+    --page-padding: 32px;
+    --control-height: 44px;
+
+    /* ---- 氛围光 ---- */
+    --glow: rgba(79, 143, 247, 0.1);
+
+    /* ---- 主题修正：旧系统硬编码、深色下不跟随的地方 ---- */
+    /* 主按钮投影用强调色的 RGB 分量，深色下自动跟随 --color-accent */
+    --accent-rgb: 79, 143, 247;
+    --danger-hover: #dc2626;
+    /* 遮罩：旧系统两套主题都用同一个 slate 值，这里提为令牌以便按主题调整 */
+    --overlay-bg: rgba(15, 23, 42, 0.32);
+    --overlay-blur: 8px;
+    /* 开关轨道灰与旋钮（旧系统硬编码） */
+    --switch-track: rgba(120, 120, 128, 0.18);
+    --switch-knob: #ffffff;
+    --switch-knob-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    /* 按钮前景白（旧系统写死 #fff） */
+    --color-on-accent: #ffffff;
+}
+
+[data-theme="dark"] {
+    /* ---- 表面与文本 ---- */
+    --color-bg: #0d1117;
+    --color-bg-elevated: #151b23;
+    --color-surface: rgba(24, 30, 40, 0.66);
+    --color-surface-solid: #171d26;
+    --color-surface-hover: rgba(32, 39, 51, 0.82);
+    --color-text: #f2f5f8;
+    --color-text-secondary: #aeb8c5;
+    --color-text-tertiary: #7f8a98;
+    --color-text-disabled: #5f6975;
+
+    /* ---- 强调色与语义色 ----
+       注意：--color-success / --color-warning / --color-danger 三色
+       在两套主题中相同，旧系统亦如此，保持不变。 */
+    --color-accent: #70a7ff;
+    --color-accent-hover: #8ab8ff;
+    --color-accent-soft: rgba(112, 167, 255, 0.14);
+    --color-success-soft: rgba(52, 168, 83, 0.18);
+    --color-danger-soft: rgba(239, 68, 68, 0.16);
+
+    /* ---- 玻璃材质 ---- */
+    --glass-bg: rgba(24, 30, 40, 0.66);
+    --glass-strong-bg: rgba(27, 34, 45, 0.84);
+    --glass-ctl-bg: rgba(30, 37, 49, 0.78);
+    --glass-border: rgba(255, 255, 255, 0.09);
+    --glass-border-soft: rgba(255, 255, 255, 0.07);
+    --glass-highlight: rgba(255, 255, 255, 0.14);
+
+    /* ---- 阴影 ---- */
+    --shadow-sm: 0 4px 18px rgba(0, 0, 0, 0.18);
+    --shadow-md: 0 10px 32px rgba(0, 0, 0, 0.24);
+    --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.34);
+
+    /* ---- 氛围光 ---- */
+    --glow: rgba(112, 167, 255, 0.12);
+
+    /* ---- 主题修正跟随 ---- */
+    --accent-rgb: 112, 167, 255;
+    --danger-hover: #f05252;
+    --overlay-bg: rgba(0, 0, 0, 0.56);
+    --switch-track: rgba(120, 120, 128, 0.36);
+    --switch-knob: #f8fafc;
+}

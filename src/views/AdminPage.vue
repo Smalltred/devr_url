@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/admin/ConfirmDialog.vue'
 import EditLinkModal from '../components/admin/EditLinkModal.vue'
 import LinkStatsModal from '../components/admin/LinkStatsModal.vue'
 import StatBars from '../components/admin/StatBars.vue'
+import PeriodSwitch from '../components/admin/PeriodSwitch.vue'
 
 // checking → login | ready
 const authState = ref('checking')
@@ -27,6 +28,8 @@ const notice = ref('')
 
 const editing = ref(null)
 const statsCode = ref('')
+// 趋势粒度：day / week / month / year
+const period = ref('day')
 // 待确认删除的短链，非空时显示主题确认弹窗
 const pendingDelete = ref(null)
 // 退出登录请求进行中：按钮转 spinner 防重复提交
@@ -89,7 +92,7 @@ async function refresh() {
     loading.value = true
     try {
         const [ov, list] = await Promise.all([
-            api.fetchOverview(),
+            api.fetchOverview(period.value),
             api.fetchLinks({ page: page.value, per_page: perPage.value, q: appliedKeyword.value }),
         ])
         overview.value = ov
@@ -105,6 +108,24 @@ async function refresh() {
         showNotice(err.response?.data?.error || err.message || '加载失败')
     } finally {
         loading.value = false
+    }
+}
+
+// 切换趋势粒度：只重拉概览，不动列表（避免整页 loading 闪动）
+const periodLoading = ref(false)
+async function onPeriodChange(value) {
+    period.value = value
+    periodLoading.value = true
+    try {
+        overview.value = await api.fetchOverview(value)
+    } catch (err) {
+        if (err.isAuthError) {
+            authState.value = 'login'
+            return
+        }
+        showNotice(err.response?.data?.error || err.message || '趋势加载失败')
+    } finally {
+        periodLoading.value = false
     }
 }
 
@@ -246,8 +267,16 @@ function showNotice(message) {
                 <!-- 全站趋势 + Top10 -->
                 <div v-if="overview" class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
                     <div class="glass card lg:col-span-2">
-                        <h2 class="mb-4 text-base font-semibold">全站近 14 天点击趋势（UTC 日切）</h2>
-                        <StatBars :series="overview.daily" />
+                        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                            <h2 class="text-base font-semibold">
+                                全站点击趋势
+                                <span class="ml-1 text-xs font-normal text-ink-3">UTC 口径</span>
+                            </h2>
+                            <PeriodSwitch :model-value="period" @update:model-value="onPeriodChange" />
+                        </div>
+                        <div :class="periodLoading ? 'opacity-60 transition-opacity' : 'transition-opacity'">
+                            <StatBars :series="overview.daily" :period="overview.period || period" />
+                        </div>
                     </div>
                     <div class="glass card">
                         <h2 class="mb-4 text-base font-semibold">点击 Top 10</h2>

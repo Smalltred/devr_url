@@ -79,28 +79,78 @@ final class InMemoryClickRepository implements ClickRepository
         return array_slice($list, 0, $limit);
     }
 
-    public function dailySeries(?string $code, int $days): array
+    /**
+     * 趋势聚合替身：与 SqliteClickRepository 同口径（UTC、周一起始周、月/年起始）。
+     *
+     * @param 'day'|'week'|'month'|'year' $period
+     */
+    public function series(?string $code, string $period, int $buckets): array
     {
-        $floor = gmdate('Y-m-d', time() - ($days - 1) * 86400);
         $counts = [];
         foreach ($this->clicks as $click) {
             if ($code !== null && $click['code'] !== $code) {
                 continue;
             }
-            $date = (string) substr($click['clicked_at'], 0, 10);
-            if ($date < $floor) {
-                continue;
-            }
-            $counts[$date] = ($counts[$date] ?? 0) + 1;
+            $bucket = self::bucketOf(substr($click['clicked_at'], 0, 10), $period);
+            $counts[$bucket] = ($counts[$bucket] ?? 0) + 1;
         }
         ksort($counts);
 
+        // 只返回窗口内的桶，语义与 SQL 实现的 WHERE 过滤一致
+        $floor = self::windowFloor($period, $buckets);
         $series = [];
         foreach ($counts as $date => $clicks) {
+            if ($date < $floor) {
+                continue;
+            }
             $series[] = ['date' => (string) $date, 'clicks' => (int) $clicks];
         }
 
         return $series;
+    }
+
+    private static function bucketOf(string $date, string $period): string
+    {
+        switch ($period) {
+            case 'week':
+                $timestamp = (int) strtotime($date.' UTC');
+                $weekday = (int) gmdate('w', $timestamp);
+
+                return gmdate('Y-m-d', $timestamp - ((($weekday + 6) % 7) * 86400));
+            case 'month':
+                return substr($date, 0, 7).'-01';
+            case 'year':
+                return substr($date, 0, 4).'-01-01';
+            default:
+                return $date;
+        }
+    }
+
+    private static function windowFloor(string $period, int $buckets): string
+    {
+        $today = intdiv(time(), 86400) * 86400;
+        $offset = max(1, $buckets) - 1;
+
+        switch ($period) {
+            case 'week':
+                $weekday = (int) gmdate('w', $today);
+                $weekStart = $today - ((($weekday + 6) % 7) * 86400);
+
+                return gmdate('Y-m-d', $weekStart - $offset * 7 * 86400);
+            case 'month':
+                $year = (int) gmdate('Y', $today);
+                $month = (int) gmdate('n', $today) - $offset;
+                while ($month < 1) {
+                    $month += 12;
+                    $year--;
+                }
+
+                return sprintf('%04d-%02d-01', $year, $month);
+            case 'year':
+                return sprintf('%04d-01-01', (int) gmdate('Y', $today) - $offset);
+            default:
+                return gmdate('Y-m-d', $today - $offset * 86400);
+        }
     }
 
     public function visitors(string $code): int

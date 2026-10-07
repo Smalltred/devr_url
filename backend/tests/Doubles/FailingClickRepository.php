@@ -41,7 +41,7 @@ final class FailingClickRepository implements ClickRepository
         return [];
     }
 
-    public function dailySeries(?string $code, int $days): array
+    public function series(?string $code, string $period, int $buckets): array
     {
         return [];
     }

@@ -47,12 +47,14 @@ interface ClickRepository
     public function topCodes(int $limit): array;
 
     /**
-     * 近 $days 天（含今日，UTC）的每日点击数；$code 为 null 时统计全站。
-     * 只返回有数据的日期，缺失日期由调用方补零。
+     * 趋势序列：按粒度 $period（day/week/month/year）聚合。
+     * $code 为 null 时统计全站；只返回有数据的桶，缺失桶由调用方补零。
      *
-     * @return list<array{date: string, clicks: int}> date 格式 Y-m-d
+     * @param 'day'|'week'|'month'|'year' $period
+     *
+     * @return list<array{date: string, clicks: int}> date 为桶起始日（Y-m-d）
      */
-    public function dailySeries(?string $code, int $days): array;
+    public function series(?string $code, string $period, int $buckets): array;
 
     /**
      * 独立访客数（按 ip_hash 去重；ip_hash 为 NULL 的记录不计入）。

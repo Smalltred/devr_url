@@ -1,0 +1,750 @@
+/* ============================================================================
+   样式入口 —— 全部样式集中于此
+
+   为什么不分文件：Vite 会为每个 @import 的 CSS 文件单独跑一次 PostCSS，
+   而 Tailwind 只认「与 @tailwind 指令处于同一文件」的 @layer 内容，
+   否则整块 @layer 会被静默丢弃（不报错，样式就是不生效）。
+   因此除 tokens.css（纯自定义属性，不涉及 @layer）外，其余样式必须内联在这里。
+   ========================================================================== */
+
+/* @import 必须位于所有规则之前（CSS 规范要求） */
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   基础层
+   ========================================================================== */
+@layer base {
+    html {
+        min-height: 100%;
+        background: var(--color-bg);
+        color-scheme: light;
+        /* 随字号自动调整字形 */
+        font-optical-sizing: auto;
+        text-rendering: optimizeLegibility;
+    }
+
+    html[data-theme='dark'] {
+        color-scheme: dark;
+    }
+
+    body {
+        min-height: 100vh;
+        margin: 0;
+        background: var(--color-bg);
+        color: var(--color-text);
+        font-family: var(--font-sans);
+        font-size: var(--text-base);
+        line-height: var(--leading-base);
+        letter-spacing: var(--tracking-base);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        /* 主题切换淡入而非突变，避免亮度跳变 */
+        transition: background var(--duration-normal) var(--ease);
+    }
+
+    /* 氛围光层 */
+    body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background:
+            radial-gradient(640px 420px at 12% -10%, var(--glow), transparent 60%),
+            radial-gradient(760px 520px at 95% -15%, var(--glow), transparent 62%);
+    }
+
+    ::selection {
+        background: var(--color-accent-soft);
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        html {
+            scroll-behavior: auto;
+        }
+    }
+}
+
+/* ============================================================================
+   排版阶梯
+   每个层级是「字号 + 字距 + 行高」的三元组，而不是只改字号。
+   字越大字母越显得散 → 负字距；小字需要正字距保可读性。
+   ========================================================================== */
+    .type-3xl {
+        font-size: var(--text-3xl);
+        line-height: var(--leading-3xl);
+        letter-spacing: var(--tracking-3xl);
+        font-weight: var(--weight-semibold);
+    }
+
+    .type-2xl {
+        font-size: var(--text-2xl);
+        line-height: var(--leading-2xl);
+        letter-spacing: var(--tracking-2xl);
+        font-weight: var(--weight-semibold);
+    }
+
+    .type-xl {
+        font-size: var(--text-xl);
+        line-height: var(--leading-xl);
+        letter-spacing: var(--tracking-xl);
+        font-weight: var(--weight-semibold);
+    }
+
+    .type-lg {
+        font-size: var(--text-lg);
+        line-height: var(--leading-lg);
+        letter-spacing: var(--tracking-lg);
+        font-weight: var(--weight-semibold);
+    }
+
+    .type-base {
+        font-size: var(--text-base);
+        line-height: var(--leading-base);
+        letter-spacing: var(--tracking-base);
+    }
+
+    .type-sm {
+        font-size: var(--text-sm);
+        line-height: var(--leading-sm);
+        letter-spacing: var(--tracking-sm);
+    }
+
+    .type-xs {
+        font-size: var(--text-xs);
+        line-height: var(--leading-sm);
+        letter-spacing: var(--tracking-xs);
+    }
+
+    /* 全大写小标签：需要正字距才易读 */
+    .type-caps {
+        font-size: var(--text-xs);
+        line-height: var(--leading-sm);
+        letter-spacing: var(--tracking-caps);
+        text-transform: uppercase;
+        font-weight: var(--weight-medium);
+    }
+
+    /* 数据用等宽数字，避免跳动 */
+    .tnum {
+        font-variant-numeric: tabular-nums;
+    }
+
+/* ============================================================================
+   材质分层
+   thin    —— 最轻，浮于内容之上的条带
+   regular —— 二级卡片、轻量面板
+   thick   —— 主卡片、对话框等需要强分离的表面
+   solid   —— 数据密集区，完全遮蔽背景以保证可读性
+   不要把轻材质叠在另一层轻材质之上，可读性会崩。
+   ========================================================================== */
+    .material-thin {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    }
+
+    .material-regular {
+        background: var(--glass-bg);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--shadow-sm);
+        backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+        -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    }
+
+    .material-thick {
+        background: var(--glass-strong-bg);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--shadow-md);
+        backdrop-filter: blur(var(--glass-blur-strong)) saturate(180%);
+        -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(180%);
+    }
+
+    .material-solid {
+        background: var(--color-surface-solid);
+        border: 1px solid var(--glass-border-soft);
+        box-shadow: var(--shadow-sm);
+    }
+
+    /* 材质顶部高光边：光打在玻璃上缘 */
+    .material-edge {
+        position: relative;
+    }
+
+    .material-edge::before {
+        content: '';
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 1px;
+        border-radius: inherit;
+        background: linear-gradient(90deg,
+                transparent,
+                var(--glass-highlight) 18%,
+                var(--glass-highlight) 82%,
+                transparent);
+        pointer-events: none;
+    }
+
+    /* 滚动边缘：内容滚到浮动条下方时渐隐，取代生硬的 1px 分隔线 */
+    .scroll-edge-top {
+        mask-image: linear-gradient(to bottom, transparent, #000 var(--edge-size, 16px));
+    }
+
+    .scroll-edge-bottom {
+        mask-image: linear-gradient(to top, transparent, #000 var(--edge-size, 16px));
+    }
+
+    /* 卡片容器：只负责圆角与内边距，材质由 material-* 类提供。
+       --card-pad 单独暴露为变量，供卡片内需要横向贯通的内容（如表格）反推边距。 */
+    .card {
+        --card-pad: var(--space-6);
+        border-radius: var(--radius-lg);
+        padding: var(--card-pad);
+    }
+
+    .card-sm {
+        --card-pad: var(--space-4);
+        border-radius: var(--radius-md);
+        padding: var(--card-pad);
+    }
+
+/* ============================================================================
+   组件原语
+   ========================================================================== */
+
+    /* ============ 按钮 ============
+       按下反馈走 transform: scale —— 纯合成器属性，不触发重排。
+       过渡时间短（140ms），因为它只是「跟随手指」不是「动画表演」。 */
+    .btn {
+        min-height: var(--control-height);
+        padding: 0 16px;
+        border: 0;
+        border-radius: var(--radius-md);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+        font-family: inherit;
+        font-weight: var(--weight-semibold);
+        font-size: var(--text-base);
+        letter-spacing: var(--tracking-base);
+        white-space: nowrap;
+        transition:
+            transform var(--duration-fast) var(--ease),
+            background var(--duration-fast) var(--ease),
+            box-shadow var(--duration-fast) var(--ease),
+            color var(--duration-fast) var(--ease),
+            opacity var(--duration-fast) var(--ease);
+    }
+
+    .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* 按下态由 pointerdown 驱动，不等 click */
+    .btn.is-pressed:not(:disabled) {
+        transform: scale(0.97);
+    }
+
+    .btn-primary {
+        background: var(--color-accent);
+        color: var(--color-on-accent);
+        /* 投影用强调色的 RGB 分量，深色下自动跟随 --color-accent */
+        box-shadow: 0 6px 18px rgba(var(--accent-rgb), 0.22);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        background: var(--color-accent-hover);
+    }
+
+    .btn-secondary {
+        background: var(--glass-ctl-bg);
+        border: 1px solid var(--glass-border-soft);
+        color: var(--color-text);
+        backdrop-filter: blur(18px) saturate(180%);
+        -webkit-backdrop-filter: blur(18px) saturate(180%);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+        background: var(--color-surface-hover);
+    }
+
+    .btn-ghost {
+        background: transparent;
+        color: var(--color-text-secondary);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+        color: var(--color-text);
+        background: var(--color-accent-soft);
+    }
+
+    .btn-danger {
+        background: var(--color-danger);
+        color: var(--color-on-accent);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+        background: var(--danger-hover);
+    }
+
+    .btn-tinted {
+        background: var(--color-accent-soft);
+        color: var(--color-accent-hover);
+    }
+
+    .btn-tinted:hover:not(:disabled) {
+        color: var(--color-accent);
+    }
+
+    .btn-sm {
+        min-height: 36px;
+        padding: 0 12px;
+        font-size: var(--text-md);
+        border-radius: var(--radius-sm);
+    }
+
+    .btn-icon {
+        width: var(--control-height);
+        min-width: var(--control-height);
+        padding: 0;
+    }
+
+    /* ============ 输入 ============ */
+    .input {
+        width: 100%;
+        min-height: var(--control-height);
+        padding: 0 14px;
+        color: var(--color-text);
+        background: var(--glass-ctl-bg);
+        border: 1px solid var(--glass-border-soft);
+        border-radius: var(--radius-md);
+        outline: none;
+        font-size: var(--text-base);
+        font-family: inherit;
+        letter-spacing: var(--tracking-base);
+        backdrop-filter: blur(18px) saturate(180%);
+        -webkit-backdrop-filter: blur(18px) saturate(180%);
+        transition:
+            border-color var(--duration-fast) var(--ease),
+            box-shadow var(--duration-fast) var(--ease);
+    }
+
+    .input::placeholder {
+        color: var(--color-text-tertiary);
+        letter-spacing: var(--tracking-sm);
+    }
+
+    .input:focus {
+        border-color: var(--color-accent);
+        box-shadow: 0 0 0 3px var(--color-accent-soft);
+    }
+
+    .input[aria-invalid='true'] {
+        border-color: var(--color-danger);
+    }
+
+    /* ============ 标签与提示 ============ */
+    .field-label {
+        display: block;
+        margin-bottom: var(--space-2);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        color: var(--color-text-secondary);
+        letter-spacing: var(--tracking-sm);
+    }
+
+    .field-hint {
+        margin-top: var(--space-1);
+        font-size: var(--text-xs);
+        color: var(--color-text-tertiary);
+        line-height: var(--leading-sm);
+    }
+
+    .field-error {
+        margin-top: var(--space-2);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        color: var(--color-danger);
+    }
+
+    /* ============ 芯片 / 徽标 ============ */
+    .chip {
+        min-height: 30px;
+        padding: 0 10px;
+        border-radius: var(--radius-pill);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--color-accent-soft);
+        color: var(--color-accent-hover);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+    }
+
+    .chip-success {
+        background: var(--color-success-soft);
+        color: var(--color-success);
+    }
+
+    .chip-danger {
+        background: var(--color-danger-soft);
+        color: var(--color-danger);
+    }
+
+    /* ============ 分段控件 ============
+       选中块是一个真实元素（.segmented-thumb），由弹簧驱动左右滑动，
+       因此可以在滑动途中反向 —— 可中断性最直观的体现。 */
+    .segmented {
+        position: relative;
+        display: inline-flex;
+        gap: 4px;
+        padding: 4px;
+        border-radius: var(--radius-md);
+    }
+
+    .segmented-thumb {
+        position: absolute;
+        top: 4px;
+        bottom: 4px;
+        border-radius: calc(var(--radius-md) - 5px);
+        background: var(--color-surface-solid);
+        box-shadow: var(--shadow-sm);
+        pointer-events: none;
+        will-change: transform, width;
+    }
+
+    .segmented button {
+        position: relative;
+        z-index: 1;
+        min-height: 36px;
+        padding: 0 16px;
+        border: 0;
+        border-radius: calc(var(--radius-md) - 5px);
+        background: transparent;
+        font-family: inherit;
+        font-weight: var(--weight-semibold);
+        font-size: var(--text-md);
+        color: var(--color-text-secondary);
+        cursor: pointer;
+        transition: color var(--duration-fast) var(--ease);
+    }
+
+    .segmented button:hover {
+        color: var(--color-text);
+    }
+
+    /* 选中态：tabs 模式用 aria-selected，group（筛选）模式用 aria-pressed */
+    .segmented button[aria-selected='true'],
+    .segmented button[aria-pressed='true'] {
+        color: var(--color-text);
+    }
+
+    /* ============ 开关（iOS 风格） ============ */
+    .switch {
+        position: relative;
+        width: 52px;
+        height: 32px;
+        flex: none;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--glass-border-soft);
+        background: var(--switch-track);
+        cursor: pointer;
+        transition:
+            background var(--duration-normal) var(--ease),
+            border-color var(--duration-normal) var(--ease);
+    }
+
+    .switch::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--switch-knob);
+        box-shadow: var(--switch-knob-shadow);
+        transition: transform var(--duration-normal) var(--ease);
+    }
+
+    .switch[aria-checked='true'] {
+        background: var(--color-accent);
+        border-color: transparent;
+    }
+
+    .switch[aria-checked='true']::after {
+        transform: translateX(20px);
+    }
+
+    /* ============ 表格 ============
+       悬停高亮是左右两端带圆角的区块，分隔线是直线。
+       若让直线贯通整行，它的端部会落进圆角的内收区（圆弧里的空白），
+       在行两端留下像阴影一样的脏边。
+       解法：分隔线两端各内缩一个圆角量 —— 线头正好落在圆角的切线点上，
+       与高亮的弧形边缘相切；悬停行本身不画线，让高亮保持完整。
+       这也是 iOS 列表的做法：分隔线两端内缩，而非贯通全宽。 */
+    .row-hover > td {
+        transition: background var(--duration-fast) var(--ease);
+    }
+
+    .row-hover > td:first-child {
+        border-radius: var(--radius-md) 0 0 var(--radius-md);
+    }
+
+    .row-hover > td:last-child {
+        border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    }
+
+    .row-hover:hover > td {
+        background: var(--color-accent-soft);
+    }
+
+    /* separate：让 td 的圆角对背景生效（collapse 下部分浏览器会忽略 td 圆角） */
+    .data-table {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    /* 横向贯通（full-bleed）：把滚动区反向外扩卡片内边距，
+       使行高亮与分隔线铺到卡片两侧边缘，而不是停在内容区的边界上。
+       首末单元格补回等量内边距，因此文字位置完全不变，只是可点/高亮的面积变大。 */
+    .table-bleed {
+        margin-left: calc(-1 * var(--card-pad, 0px));
+        margin-right: calc(-1 * var(--card-pad, 0px));
+    }
+
+    .table-bleed .data-table > tbody > tr > td:first-child,
+    .table-bleed .data-table > thead > tr > th:first-child {
+        padding-left: var(--card-pad, 0px);
+    }
+
+    .table-bleed .data-table > tbody > tr > td:last-child,
+    .table-bleed .data-table > thead > tr > th:last-child {
+        padding-right: var(--card-pad, 0px);
+    }
+
+    .data-table > tbody > tr > td {
+        position: relative;
+    }
+
+    /* 分隔线用伪元素：两端内缩一个圆角量，末端与圆角切线点对齐 */
+    .data-table > tbody > tr:not(:hover) > td::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 1px;
+        background: var(--glass-border-soft);
+    }
+
+    .data-table > tbody > tr > td:first-child::after {
+        left: var(--radius-md);
+    }
+
+    .data-table > tbody > tr > td:last-child::after {
+        right: var(--radius-md);
+    }
+
+    /* 末行不画线：卡片内不需要收尾分隔线 */
+    .data-table > tbody > tr:last-child > td::after {
+        display: none;
+    }
+
+    /* 表头分隔线同规则，与首行悬停时的圆角保持一致 */
+    .data-table > thead > tr > th {
+        position: relative;
+        padding-bottom: var(--space-3);
+    }
+
+    .data-table > thead > tr > th::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 1px;
+        background: var(--glass-border-soft);
+    }
+
+    .data-table > thead > tr > th:first-child::after {
+        left: var(--radius-md);
+    }
+
+    .data-table > thead > tr > th:last-child::after {
+        right: var(--radius-md);
+    }
+
+    .action-btn {
+        padding: 4px 8px;
+        border: 0;
+        border-radius: var(--radius-xs);
+        background: transparent;
+        color: var(--color-text-secondary);
+        font-family: inherit;
+        font-size: var(--text-md);
+        font-weight: var(--weight-medium);
+        cursor: pointer;
+        transition:
+            color var(--duration-fast) var(--ease),
+            background var(--duration-fast) var(--ease);
+    }
+
+    .action-btn:hover {
+        color: var(--color-accent);
+        background: var(--color-accent-soft);
+    }
+
+    .action-btn.action-danger:hover {
+        color: var(--color-danger);
+        background: var(--color-danger-soft);
+    }
+
+    /* ============ 统计小瓦片 ============ */
+    .stat-tile {
+        border: 1px solid var(--glass-border-soft);
+        border-radius: var(--radius-md);
+        padding: var(--space-3);
+        background: var(--glass-ctl-bg);
+    }
+
+    /* ============ 链接 ============ */
+    .link {
+        color: var(--color-accent);
+        text-decoration: none;
+        transition: color var(--duration-fast) var(--ease);
+    }
+
+    .link:hover {
+        color: var(--color-accent-hover);
+    }
+
+    /* ============ 行内加载指示器 ============
+       跟随 currentColor：按钮内（白字）与正文（墨色）自动适配 */
+    .spinner {
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        flex-shrink: 0;
+        border: 2px solid transparent;
+        border-top-color: currentColor;
+        border-right-color: currentColor;
+        border-radius: 50%;
+        animation: spinner-rotate 0.7s linear infinite;
+    }
+
+    @keyframes spinner-rotate {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+/* ============================================================================
+   无障碍偏好
+   ========================================================================== */
+
+/* 减弱动效：不是「没有反馈」，而是换成不引起前庭不适的等效反馈。
+   位移/弹簧 → 交叉淡入；弹性回弹 → 直接落位。 */
+@media (prefers-reduced-motion: reduce) {
+    .motion-slide,
+    .motion-spring {
+        transform: none !important;
+        animation: none !important;
+    }
+
+    /* 保留透明度与颜色变化（有助于理解状态） */
+    .motion-fade {
+        transition: opacity var(--duration-fade) linear !important;
+    }
+
+    /* 加载指示器降速而非静止 —— 仍能表达「正在忙」 */
+    .spinner {
+        animation-duration: 1.6s;
+    }
+}
+
+/* 减弱透明度：材质变得更实、去掉模糊，保证文字对比 */
+@media (prefers-reduced-transparency: reduce) {
+    :root {
+        --glass-bg: rgba(255, 255, 255, 0.96);
+        --glass-strong-bg: rgba(255, 255, 255, 0.98);
+        --glass-ctl-bg: rgba(255, 255, 255, 0.96);
+    }
+
+    [data-theme='dark'] {
+        --glass-bg: rgba(24, 30, 40, 0.97);
+        --glass-strong-bg: rgba(27, 34, 45, 0.99);
+        --glass-ctl-bg: rgba(30, 37, 49, 0.97);
+    }
+
+    .material-thin,
+    .material-regular,
+    .material-thick {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+
+/* 增强对比：近实心背景 + 明确边框 */
+@media (prefers-contrast: more) {
+    :root {
+        --glass-border: rgba(15, 23, 42, 0.5);
+        --glass-border-soft: rgba(15, 23, 42, 0.34);
+        --color-text-secondary: #414c5c;
+        --color-text-tertiary: #5a6575;
+    }
+
+    [data-theme='dark'] {
+        --glass-border: rgba(255, 255, 255, 0.5);
+        --glass-border-soft: rgba(255, 255, 255, 0.34);
+        --color-text-secondary: #d7dee7;
+        --color-text-tertiary: #b6c0cc;
+    }
+
+    .material-thin,
+    .material-regular {
+        background: var(--color-surface-solid);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+
+@media (max-width: 640px) {
+    :root {
+        --page-padding: 16px;
+        --radius-lg: 18px;
+        --radius-xl: 22px;
+    }
+
+    .btn {
+        min-height: 46px;
+    }
+
+    .btn-icon {
+        width: 46px;
+        min-width: 46px;
+    }
+
+    .input {
+        min-height: 46px;
+        /* 防止 iOS 聚焦自动缩放 */
+        font-size: 16px;
+    }
+
+    .card {
+        padding: var(--space-5);
+    }
+}

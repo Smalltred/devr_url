@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "dev:apple": "vite --config apple-frontend/vite.config.js",
+    "build:apple": "vite build --config apple-frontend/vite.config.js --outDir ../dist-apple",
+    "verify:tokens": "node apple-frontend/verify-tokens.mjs"
   },
   "dependencies": {
     "axios": "^1.7.9",

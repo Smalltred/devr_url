@@ -47,8 +47,8 @@ const me = async () => {
     return res.data
 }
 
-const fetchOverview = async () => {
-    const res = await api.get('/api/admin/overview')
+const fetchOverview = async (period = 'day') => {
+    const res = await api.get('/api/admin/overview', { params: { period } })
     return res.data
 }
 
@@ -70,8 +70,8 @@ const deleteLink = async code => {
     return res.data
 }
 
-const fetchLinkStats = async code => {
-    const res = await api.get(`/api/admin/links/${encodeURIComponent(code)}/stats`)
+const fetchLinkStats = async (code, period = 'day') => {
+    const res = await api.get(`/api/admin/links/${encodeURIComponent(code)}/stats`, { params: { period } })
     return res.data
 }
 

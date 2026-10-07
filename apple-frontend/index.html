@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48 64x64" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f7fb" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1117" />
+    <script>
+        // 首帧渲染前应用主题，避免深色模式白屏闪烁。
+        // 与旧前端共用 devr-theme 键：在 3000/3100 之间切换时主题保持一致。
+        (function () {
+            try {
+                var t = localStorage.getItem('devr-theme');
+                if (t !== 'dark' && t !== 'light') {
+                    t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                document.documentElement.dataset.theme = t;
+            } catch (e) { /* localStorage 不可用时保持浅色 */ }
+        })();
+    </script>
+    <meta name="description" content="Devr —— 简单易用的短链接生成工具，链接永久有效！" />
+    <link rel="apple-touch-icon" href="/logo100.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <title>Devr</title>
+</head>
+
+<body>
+    <noscript>本站需要启用 JavaScript 才能使用。</noscript>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>

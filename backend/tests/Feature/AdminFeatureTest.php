@@ -326,6 +326,89 @@ final class AdminFeatureTest extends TestCase
         self::assertSame(0, $statsBody['devices']['mobile']);
     }
 
+    public function testTrendPeriodsSwitchBucketSizeAndWindow(): void
+    {
+        $this->repository->save('abc', 'https://example.com');
+        $this->clicks->record('abc', self::clickContext());
+        $this->clicks->record('abc', self::clickContext());
+        $token = $this->loginToken();
+
+        $expected = [
+            // 粒度 => 桶数（与 AdminService::PERIOD_BUCKETS 对应）
+            'day' => 14,
+            'week' => 12,
+            'month' => 12,
+            'year' => 5,
+        ];
+
+        foreach ($expected as $period => $buckets) {
+            $overview = $this->app->handle(
+                TestApp::request('GET', '/api/admin/overview?period='.$period, null, TestApp::cookieHeader($token)),
+            );
+            $body = $overview->decodedJson() ?? [];
+            self::assertSame($period, $body['period'] ?? null, $period.' 粒度需回显');
+            self::assertCount($buckets, $body['daily'] ?? [], $period.' 桶数不符');
+            // 全站 2 次点击都落在当前桶内
+            self::assertSame(2, $body['daily'][$buckets - 1]['clicks'] ?? null, $period.' 当前桶应包含今日点击');
+
+            $stats = $this->app->handle(
+                TestApp::request('GET', '/api/admin/links/abc/stats?period='.$period, null, TestApp::cookieHeader($token)),
+            );
+            $statsBody = $stats->decodedJson() ?? [];
+            self::assertSame($period, $statsBody['period'] ?? null);
+            self::assertCount($buckets, $statsBody['daily'] ?? []);
+            self::assertSame(2, $statsBody['daily'][$buckets - 1]['clicks'] ?? null);
+        }
+    }
+
+    public function testTrendPeriodBucketsAlignToCalendarBoundaries(): void
+    {
+        $this->repository->save('abc', 'https://example.com');
+        $token = $this->loginToken();
+
+        $overview = $this->app->handle(
+            TestApp::request('GET', '/api/admin/overview?period=month', null, TestApp::cookieHeader($token)),
+        );
+        $daily = $overview->decodedJson()['daily'] ?? [];
+
+        foreach ($daily as $point) {
+            self::assertMatchesRegularExpression('/^\d{4}-\d{2}-01$/', (string) $point['date'], '月粒度桶起点必须是当月 1 日');
+        }
+
+        $byYear = $this->app->handle(
+            TestApp::request('GET', '/api/admin/overview?period=year', null, TestApp::cookieHeader($token)),
+        )->decodedJson()['daily'] ?? [];
+        foreach ($byYear as $point) {
+            self::assertMatchesRegularExpression('/^\d{4}-01-01$/', (string) $point['date'], '年粒度桶起点必须是 1 月 1 日');
+        }
+
+        // 周粒度：桶起点必须是周一（UTC）
+        $byWeek = $this->app->handle(
+            TestApp::request('GET', '/api/admin/overview?period=week', null, TestApp::cookieHeader($token)),
+        )->decodedJson()['daily'] ?? [];
+        foreach ($byWeek as $point) {
+            $weekday = (int) gmdate('w', (int) strtotime((string) $point['date'].' UTC'));
+            self::assertSame(1, $weekday, '周粒度桶起点必须是周一：'.$point['date']);
+        }
+        // 末位桶为本周
+        $lastWeek = (string) (($byWeek[count($byWeek) - 1]['date'] ?? ''));
+        $thisWeek = gmdate('Y-m-d', intdiv(time(), 86400) * 86400 - (((int) gmdate('w') + 6) % 7) * 86400);
+        self::assertSame($thisWeek, $lastWeek, '末位桶必须是本周');
+    }
+
+    public function testInvalidTrendPeriodFallsBackToDay(): void
+    {
+        $token = $this->loginToken();
+
+        $overview = $this->app->handle(
+            TestApp::request('GET', '/api/admin/overview?period=hourly', null, TestApp::cookieHeader($token)),
+        );
+        $body = $overview->decodedJson() ?? [];
+
+        self::assertSame('day', $body['period'] ?? null, '非法粒度必须回落为 day');
+        self::assertCount(14, $body['daily'] ?? []);
+    }
+
     public function testAdminPageServesDistIndex(): void
     {
         self::assertSame(404, $this->app->handle(TestApp::request('GET', '/admin'))->status());

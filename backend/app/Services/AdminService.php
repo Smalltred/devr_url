@@ -23,7 +23,13 @@ final class AdminService
 
     private const CODE_PATTERN = '/^[0-9A-Za-z]{1,32}$/';
 
-    private const TREND_DAYS = 14;
+    /** 各粒度的默认展示桶数（约 2 周 / 3 个月 / 一年 / 五年） */
+    private const PERIOD_BUCKETS = [
+        'day' => 14,
+        'week' => 12,
+        'month' => 12,
+        'year' => 5,
+    ];
 
     private const MAX_CODE_MIN_LENGTH = 16;
 
@@ -139,11 +145,13 @@ final class AdminService
     }
 
     /**
-     * 全站概览：链接总数、总点击、今日点击、近 14 天趋势、点击 Top 10。
+     * 全站概览：链接总数、总点击、今日点击、按粒度聚合的趋势、点击 Top 10。
+     *
+     * @param string $period 趋势粒度：day / week / month / year
      *
      * @return array<string, mixed>
      */
-    public function overview(): array
+    public function overview(string $period = 'day'): array
     {
         $topLinks = [];
         foreach ($this->clicks->topCodes(10) as $row) {
@@ -154,13 +162,31 @@ final class AdminService
             ];
         }
 
+        $period = $this->normalizePeriod($period);
+
         return [
             'links' => $this->urls->countAll(),
             'total_clicks' => $this->clicks->totalAll(),
             'clicks_today' => $this->clicks->todayAll(),
-            'daily' => $this->fillDaily($this->clicks->dailySeries(null, self::TREND_DAYS)),
+            'period' => $period,
+            'daily' => $this->fillSeries($this->clicks->series(null, $period, self::PERIOD_BUCKETS[$period]), $period),
             'top_links' => $topLinks,
         ];
+    }
+
+    /**
+     * 粒度兜底：非法值回落为 day，避免拼进 SQL 与数组下标。
+     *
+     * @return 'day'|'week'|'month'|'year'
+     */
+    private function normalizePeriod(string $period): string
+    {
+        return match ($period) {
+            'week' => 'week',
+            'month' => 'month',
+            'year' => 'year',
+            default => 'day',
+        };
     }
 
     /**
@@ -250,16 +276,20 @@ final class AdminService
     }
 
     /**
-     * 单链统计：总点击、今日点击、独立访客、近 14 天趋势、来源域名 Top 10、设备分布。
+     * 单链统计：总点击、今日点击、独立访客、按粒度聚合的趋势、来源域名 Top 10、设备分布。
+     *
+     * @param string $period 趋势粒度：day / week / month / year
      *
      * @return array<string, mixed>
      */
-    public function linkStats(string $code): array
+    public function linkStats(string $code, string $period = 'day'): array
     {
         $url = $this->urls->findByCode($code);
         if ($url === null) {
             throw new ShortCodeNotFoundException();
         }
+
+        $period = $this->normalizePeriod($period);
 
         return [
             'code' => $code,
@@ -267,7 +297,8 @@ final class AdminService
             'total_clicks' => $this->clicks->totalByCodes([$code])[$code] ?? 0,
             'clicks_today' => $this->clicks->todayByCodes([$code])[$code] ?? 0,
             'visitors' => $this->clicks->visitors($code),
-            'daily' => $this->fillDaily($this->clicks->dailySeries($code, self::TREND_DAYS)),
+            'period' => $period,
+            'daily' => $this->fillSeries($this->clicks->series($code, $period, self::PERIOD_BUCKETS[$period]), $period),
             'referers' => $this->clicks->topRefererHosts($code, 10),
             'devices' => $this->clicks->deviceSplit($code),
         ];
@@ -289,13 +320,16 @@ final class AdminService
     }
 
     /**
-     * 把聚合查询返回的稀疏日期序列补齐为近 $days 天的连续序列（UTC）。
+     * 把聚合查询返回的稀疏序列补齐为连续桶（UTC）：
+     * day → 最近 14 天；week → 最近 12 周（周一为桶起点）；
+     * month → 最近 12 个月；year → 最近 5 年。桶数与 SQL 侧 rangeStartExpression 保持一致。
      *
      * @param list<array{date: string, clicks: int}> $series
+     * @param string $period 已规范化的粒度
      *
      * @return list<array{date: string, clicks: int}>
      */
-    private function fillDaily(array $series): array
+    private function fillSeries(array $series, string $period): array
     {
         $byDate = [];
         foreach ($series as $point) {
@@ -303,13 +337,60 @@ final class AdminService
         }
 
         $filled = [];
-        // epoch 本身按 UTC 计日，整除 86400 即当前 UTC 日零点，与 SQLite date('now') 口径一致
+        // epoch 整除 86400 即当前 UTC 日零点，与 SQLite date('now') 口径一致
         $today = intdiv(time(), 86400) * 86400;
-        for ($i = self::TREND_DAYS - 1; $i >= 0; $i--) {
-            $date = gmdate('Y-m-d', $today - $i * 86400);
+
+        foreach ($this->bucketStarts($today, $period) as $date) {
             $filled[] = ['date' => $date, 'clicks' => $byDate[$date] ?? 0];
         }
 
         return $filled;
+    }
+
+    /**
+     * 生成连续桶的起始日列表（升序，末位为当前桶）。
+     *
+     * @return list<string>
+     */
+    private function bucketStarts(int $today, string $period): array
+    {
+        $count = self::PERIOD_BUCKETS[$period] ?? 14;
+        $dates = [];
+
+        for ($i = $count - 1; $i >= 0; $i--) {
+            $dates[] = match ($period) {
+                // 周一为桶起点：strftime %w 中 0=周日，(w+6)%7 为距本周一的天数
+                'week' => gmdate('Y-m-d', $this->weekStart($today) - $i * 7 * 86400),
+                'month' => $this->monthStart($today, $i),
+                'year' => $this->yearStart($today, $i),
+                default => gmdate('Y-m-d', $today - $i * 86400),
+            };
+        }
+
+        return $dates;
+    }
+
+    private function weekStart(int $today): int
+    {
+        $weekday = (int) gmdate('w', $today); // 0=周日
+
+        return $today - ((($weekday + 6) % 7) * 86400);
+    }
+
+    private function monthStart(int $today, int $monthsAgo): string
+    {
+        $year = (int) gmdate('Y', $today);
+        $month = (int) gmdate('n', $today) - $monthsAgo;
+        while ($month < 1) {
+            $month += 12;
+            $year--;
+        }
+
+        return sprintf('%04d-%02d-01', $year, $month);
+    }
+
+    private function yearStart(int $today, int $yearsAgo): string
+    {
+        return sprintf('%04d-01-01', (int) gmdate('Y', $today) - $yearsAgo);
     }
 }
