@@ -1,29 +1,34 @@
 # Devr · Apple 设计语言前端
 
-同一后端的第二套前端，按 Apple 设计原则（*Designing Fluid Interfaces* 等 WWDC 设计分享）
-重写交互与视觉，**配色逐值沿用原前端**（155 项令牌断言零差异）。
+**默认前端**。按 Apple 设计原则（*Designing Fluid Interfaces* 等 WWDC 设计分享）
+重写交互与视觉，**配色逐值沿用旧前端**（155 项令牌断言零差异）。
 
 ## 运行
 
 ```bash
-# 开发（端口 3100，API 代理到后端 3001）
-npm run dev:apple
+# 开发（端口 3000，API 与短码跳转代理到后端 3001）
+npm run dev
 
-# 生产构建（输出到 dist-apple/）
-npm run build:apple
+# 生产构建（输出到项目根 dist/，后端与部署脚本都从那里读取）
+npm run build
 
 # 校验配色令牌与旧前端逐值一致
 npm run verify:tokens
 ```
 
-旧前端仍可用 `npm run dev`（端口 3000）启动，两者共用同一后端与数据库，可并行对照。
+旧前端保留为对照版本：`npm run dev:legacy`（端口 3300），构建输出 `dist-legacy/`。
+两者共用同一后端与数据库，可并行运行对照。
+
+> 开发时 `/admin` 由本前端的 dev server 直出（保留 HMR）；生产环境由后端返回
+> `dist/index.html`。短码跳转 `GET /{code}` 在开发环境走 Vite proxy 到后端，
+> 否则点击只会命中前端 404 且不记录统计。
 
 ## 目录
 
 ```
 apple-frontend/
-├── index.html            入口（首帧前应用主题，与旧前端共用 devr-theme 键）
-├── vite.config.js        端口 3100 + API 代理
+├── index.html            入口（首帧前应用主题，与旧前端共用 devr-theme 键；含 GA 埋点）
+├── vite.config.js        端口 3000 + API 与短码跳转代理；构建输出到项目根 dist/
 ├── tailwind.config.js    布局工具类（配色走 CSS 变量，不在此定义）
 ├── postcss.config.js     显式锁定 tailwind 配置路径
 ├── verify-tokens.mjs     配色保真断言
@@ -54,7 +59,11 @@ apple-frontend/
 
 **弹窗 → Sheet**：可下滑关闭，1:1 跟手、越界橡皮筋、释放时用投影决定关闭或弹回；
 点击遮罩空白处关闭（关闭处理挂在压暗层自身——它铺满整个遮罩区，事件不会冒泡到父容器）；
-配焦点陷阱、焦点归还、body 滚动锁。
+配焦点陷阱、焦点归还、body 滚动锁（用 `scrollbar-gutter: stable` 预留槽位，避免锁定瞬间内容横移）。
+
+**空间一致性**：Sheet 从触发元素的矩形位置生长（传入 `originRect`，如统计按钮），
+而非屏幕中心凭空出现；退场与入场镜像对称——淡出 + 轻微下沉收缩，遮罩与面板作为一个整体离场，
+不再是一帧消失。
 
 **材质**：按 thin/regular/thick/solid 分层表达层级，顶部高光边模拟光线；
 压暗层与模糊层分离，动画只走 opacity（改 background alpha 会让 backdrop-filter 每帧重算，

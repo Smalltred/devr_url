@@ -16,8 +16,9 @@
 # testing
 /coverage
 
-# production
+# 前端构建产物：dist/ 为默认前端（apple-frontend），dist-legacy/ 为对照用的旧前端
 /dist
+/dist-legacy/
 
 # misc
 .DS_Store
@@ -40,6 +41,3 @@ yarn-error.log*
 /.zcode/
 /.zcodeignore
 /baota-package.zip
-
-# 新前端构建产物
-/dist-apple/

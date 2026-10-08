@@ -34,8 +34,8 @@ Demo 地址 👉 [u.hecady.com](https://u.hecady.com)
 ## 架构
 
 ```text
-Vue 3 前端（src/，Vite 构建，含 /admin 管理面板；端口 3000）
-    ｜  另一套可选前端：apple-frontend/（Apple 设计语言，共用同一后端；端口 3100）
+Vue 3 前端（apple-frontend/，Vite 构建，含 /admin 管理面板；端口 3000）
+    ｜  另一套可选前端：src/（旧版，共用同一后端；端口 3300）
     ↓ HTTP（VITE_API_BASE_URL，留空同源）
 Nginx（静态资源 /，其余转发）
     ↓ FastCGI
@@ -47,18 +47,19 @@ SQLite（backend/storage/short-url.sqlite3，单文件永久化，WAL 模式）
 
 ## 两套前端
 
-仓库内含两套共用同一后端与数据库的前端，可并行运行对照：
+默认前端为 `apple-frontend/`（Apple 设计语言）：`npm run dev` 与 `npm run build` 都作用于它，
+构建产物输出到项目根的 `dist/`，因此后端与部署脚本无需区分前端来源。
+旧前端 `src/` 保留作为对照版本，通过 `legacy` 后缀的脚本运行。
 
-| | 主前端（默认） | Apple 设计语言前端 |
+| | Apple 设计语言前端（默认） | 旧前端（对照） |
 | --- | --- | --- |
-| 目录 | `src/` | `apple-frontend/` |
-| 开发 | `npm run dev`（端口 3000） | `npm run dev:apple`（端口 3100） |
-| 构建 | `npm run build` → `dist/` | `npm run build:apple` → `dist-apple/` |
-| 说明 | 本 README 其余部分 | [apple-frontend/README.md](apple-frontend/README.md) |
+| 目录 | `apple-frontend/` | `src/` |
+| 开发 | `npm run dev`（端口 3000） | `npm run dev:legacy`（端口 3300） |
+| 构建 | `npm run build` → `dist/` | `npm run build:legacy` → `dist-legacy/` |
+| 说明 | [apple-frontend/README.md](apple-frontend/README.md) | 本 README 其余部分 |
 
 Apple 前端按 Apple 设计原则（弹簧动效、跟手 Sheet、分段控件滑动等）重写交互，
-配色令牌与原前端逐值一致（`npm run verify:tokens` 可断言）。部署时二选一或并存均可，
-Nginx 指向对应构建产物即可。
+配色令牌与旧前端逐值一致（`npm run verify:tokens` 可断言）。
 
 ## 环境依赖
 
@@ -81,7 +82,8 @@ cd backend && composer install
 # 4. 启动 PHP 后端（端口 3001）
 composer serve        # 等价于 php -S 0.0.0.0:3001 -t public public/index.php
 
-# 5. 启动 Vue 前端开发服务（端口 3000，/url、/api 经 Vite proxy 转发到 3001）
+# 5. 启动前端开发服务（默认前端 apple-frontend，端口 3000）
+#    /url、/api、/admin 与短码跳转 GET /{code} 均经 Vite proxy 转发到 3001
 npm run dev
 ```
 
@@ -281,14 +283,16 @@ short-url/
 │   ├── routes/web.php     # 公开接口 + /api/auth/*、/api/admin/*、GET /admin、GET /{code}
 │   ├── storage/           # SQLite 数据库（short-url.sqlite3）与 app.log / error.log
 │   └── tests/             # PHPUnit（Unit / Feature / Compat / Doubles）
-├── src/                   # Vue 3 前端（Vite）
+├── apple-frontend/        # 默认前端（Apple 设计语言，独立 Vite 配置，共用同一后端）
+│   ├── index.html         # 入口（首帧前应用主题）
+│   ├── vite.config.js     # 端口 3000；构建输出到项目根 dist/
+│   └── src/               # motion/（弹簧引擎）/ styles/（设计令牌）/ components / home / admin
+├── src/                   # 旧前端（对照保留，端口 3300）
 │   ├── components/        # 通用组件 + admin/（登录、设置、编辑与统计弹窗）
 │   ├── views/             # AdminPage.vue 管理面板页
 │   ├── stores/            # Pinia 状态（shortUrl.js）
 │   └── services/          # API 封装（entity.js）
-├── apple-frontend/        # Apple 设计语言前端（独立 Vite 配置，共用同一后端）
-│   └── src/               # motion/（弹簧引擎）/ styles/（设计令牌）/ components / home / admin
-├── public/                # 主前端静态资源（favicon、manifest 等）
+├── public/                # 旧前端静态资源（favicon、manifest 等）
 ├── deploy/
 │   ├── nginx/             # 通用(宝塔) / docker 单容器 / compose 三种 Nginx 配置
 │   ├── baota/             # 开箱即用部署包的伪静态、public 骨架与部署说明

@@ -41,6 +41,8 @@ const homeAccessible = ref(true)
 
 const editing = ref(null)
 const statsCode = ref('')
+// 统计弹窗的入场锚点（触发按钮的矩形），用于「从按钮长出来」的入场动画
+const statsOrigin = ref(null)
 const pendingDelete = ref(null)
 // 趋势粒度：day / week / month / year
 const period = ref('day')
@@ -134,6 +136,17 @@ function goPage(target) {
 
 function shortUrlOf(code) {
     return `${window.location.origin}/${code}`
+}
+
+/**
+ * 打开统计弹窗，并记下触发按钮的位置。
+ * 弹窗据此从按钮方向生长出来（空间一致性：从哪来、回哪去），
+ * 而不是从屏幕中心凭空出现。
+ */
+function openStats(code, event) {
+    const el = event?.currentTarget ?? event?.target
+    statsOrigin.value = el?.getBoundingClientRect?.() ?? null
+    statsCode.value = code
 }
 
 function formatTime(value) {
@@ -360,7 +373,7 @@ function showNotice(message) {
                                         <button
                                             type="button"
                                             class="action-btn"
-                                            @click="statsCode = item.code"
+                                            @click="openStats(item.code, $event)"
                                         >统计</button>
                                         <button
                                             type="button"
@@ -423,7 +436,12 @@ function showNotice(message) {
             @saved="editing = null; showNotice('已保存'); refresh()"
         />
 
-        <LinkStatsSheet v-if="statsCode" :code="statsCode" @close="statsCode = ''" />
+        <LinkStatsSheet
+            v-if="statsCode"
+            :code="statsCode"
+            :origin-rect="statsOrigin"
+            @close="statsCode = ''; statsOrigin = null"
+        />
         <AppToast :message="notice" @expire="notice = ''" />
     </div>
 </template>

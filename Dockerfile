@@ -5,14 +5,13 @@
 #   docker build --target app             -> php-fpm 镜像（docker-compose 的 app 服务）
 #   docker build --target web             -> nginx 镜像（docker-compose 的 web 服务）
 
-########## Stage 1: Vue 3 前端构建（Vite）##########
+########## Stage 1: Vue 3 前端构建（Vite，apple-frontend 为默认前端）##########
 FROM node:20-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY index.html vite.config.js postcss.config.js tailwind.config.js ./
-COPY src ./src
-COPY public ./public
+# 前端源码在 apple-frontend/，产物输出到 /app/dist（后端与 nginx 都读该目录）
+COPY apple-frontend ./apple-frontend
 RUN npm run build
 
 ########## Stage 2: PHP Composer 依赖与自动加载 ##########

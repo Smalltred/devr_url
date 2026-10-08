@@ -75,8 +75,11 @@ function formatLabel(date) {
 
 <template>
     <figure class="stat-chart">
-        <!-- 空状态：给出原因与下一步，而不是留一片空白 -->
-        <div v-if="isEmpty" class="stat-empty" :style="{ minHeight: height + 16 + 'px' }" role="status">
+        <!-- 空状态：给出原因与下一步，而不是留一片空白。
+             高度与柱状态严格一致（柱区 + 横轴行），
+             否则「无数据 / 有数据」会改变图表容器高度，
+             进而传导到弹窗高度 —— 数据异步到达时就会看到弹窗位移。 -->
+        <div v-if="isEmpty" class="stat-empty" :style="{ height: height + 28 + 'px' }" role="status">
             <span>该时段内暂无点击</span>
             <span class="stat-empty-hint">切换到其他粒度，或等待短链被访问后此处将显示趋势</span>
         </div>

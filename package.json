@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "dev:apple": "vite --config apple-frontend/vite.config.js",
-    "build:apple": "vite build --config apple-frontend/vite.config.js --outDir ../dist-apple",
+    "dev": "vite --config apple-frontend/vite.config.js",
+    "build": "vite build --config apple-frontend/vite.config.js",
+    "preview": "vite preview --config apple-frontend/vite.config.js --port 4173",
+    "dev:legacy": "vite --port 3300 --strictPort",
+    "build:legacy": "vite build --outDir dist-legacy",
     "verify:tokens": "node apple-frontend/verify-tokens.mjs"
   },
   "dependencies": {
