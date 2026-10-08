@@ -241,13 +241,18 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div
-        ref="overlay"
-        class="sheet-overlay"
-        @click.self="dismissible && emit('close')"
-    >
-        <!-- 压暗层单独成层：模糊只在这里，动画只走 opacity，两者互不干扰 -->
-        <div ref="scrim" class="sheet-scrim" aria-hidden="true" />
+    <div ref="overlay" class="sheet-overlay">
+        <!-- 压暗层：点击空白处关闭。
+             关闭处理必须挂在这一层而不是外层容器的 @click.self ——
+             该层铺满整个遮罩区（inset:0），点击空白处命中的是它本身，
+             事件不会冒泡到父层，用 .self 判断父层永远收不到。
+             面板是它的兄弟节点且 z-index 更高，因此点击面板不会走到这里。 -->
+        <div
+            ref="scrim"
+            class="sheet-scrim"
+            aria-hidden="true"
+            @click="dismissible && emit('close')"
+        />
 
         <div
             ref="panel"
