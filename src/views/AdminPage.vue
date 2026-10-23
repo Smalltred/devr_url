@@ -30,6 +30,15 @@ const editing = ref(null)
 const statsCode = ref('')
 // 趋势粒度：day / week / month / year
 const period = ref('day')
+// 外链健康筛选：'' = 全部，ok / broken / unknown
+const healthFilter = ref('')
+// 健康概览：{ok, broken, unknown, pending, last_scan_at}
+const health = ref(null)
+// 扫描/清理进行中
+const scanning = ref(false)
+const cleaning = ref(false)
+// 待确认清理失效链接
+const pendingCleanup = ref(false)
 // 待确认删除的短链，非空时显示主题确认弹窗
 const pendingDelete = ref(null)
 // 退出登录请求进行中：按钮转 spinner 防重复提交
@@ -93,12 +102,18 @@ async function refresh() {
     try {
         const [ov, list] = await Promise.all([
             api.fetchOverview(period.value),
-            api.fetchLinks({ page: page.value, per_page: perPage.value, q: appliedKeyword.value }),
+            api.fetchLinks({
+                page: page.value,
+                per_page: perPage.value,
+                q: appliedKeyword.value,
+                health: healthFilter.value || undefined,
+            }),
         ])
         overview.value = ov
         items.value = list.items
         total.value = list.total
         page.value = list.page
+        health.value = list.health || null
         totalPagesMaxGuard()
     } catch (err) {
         if (err.isAuthError) {
@@ -137,6 +152,70 @@ function totalPagesMaxGuard() {
     }
 }
 
+// 切换健康状态筛选
+function setHealthFilter(value) {
+    healthFilter.value = value
+    page.value = 1
+    refresh()
+}
+
+/**
+ * 扫描一批外链。
+ * 扫描是分批的（每批 20 条、单条最多 8s），一次点击只扫一批，返回剩余待检数量，
+ * 用户可再次点击继续，避免单请求超时。
+ */
+async function scanNow() {
+    if (scanning.value) {
+        return
+    }
+    scanning.value = true
+    try {
+        const result = await api.scanLinks(20)
+        health.value = result.summary ? { ...health.value, ...result.summary, pending: result.remaining } : health.value
+        const parts = [`已检测 ${result.scanned} 条`]
+        if (result.ok > 0) parts.push(`正常 ${result.ok}`)
+        if (result.broken > 0) parts.push(`失效 ${result.broken}`)
+        if (result.skipped > 0) parts.push(`跳过 ${result.skipped}`)
+        if (result.remaining > 0) parts.push(`剩余 ${result.remaining} 条待检`)
+        showNotice(parts.join('，'))
+        await refresh()
+    } catch (err) {
+        if (err.isAuthError) {
+            authState.value = 'login'
+            return
+        }
+        showNotice(err.response?.data?.error || err.message || '扫描失败')
+    } finally {
+        scanning.value = false
+    }
+}
+
+/**
+ * 一键清理全部失效短链（含点击记录）。
+ */
+async function confirmCleanupBroken() {
+    if (cleaning.value) {
+        return
+    }
+    cleaning.value = true
+    try {
+        const result = await api.cleanupBrokenLinks()
+        health.value = result.health || health.value
+        showNotice(`已清理 ${result.deleted} 条失效短链`)
+        page.value = 1
+        await refresh()
+    } catch (err) {
+        if (err.isAuthError) {
+            authState.value = 'login'
+            return
+        }
+        showNotice(err.response?.data?.error || err.message || '清理失败')
+    } finally {
+        cleaning.value = false
+        pendingCleanup.value = false
+    }
+}
+
 function search() {
     page.value = 1
     appliedKeyword.value = keyword.value.trim()
@@ -157,6 +236,22 @@ function shortUrlOf(code) {
 
 function formatTime(value) {
     return typeof value === 'string' ? value.replace('T', ' ').slice(0, 16) : ''
+}
+
+/**
+ * 健康状态徽标的悬浮说明：给出检测结果与检测时间，便于判断是否需要更新。
+ */
+function healthTitle(item) {
+    if (item.health_status === 'unknown') {
+        return '尚未检测：点击「扫描外链」开始巡检'
+    }
+    const parts = []
+    parts.push(item.health_status === 'ok' ? '目标可正常访问' : `目标不可访问${item.health_error ? `（${item.health_error}）` : ''}`)
+    if (item.health_checked_at) {
+        parts.push(`检测于 ${formatTime(item.health_checked_at)}`)
+    }
+
+    return parts.join('，')
 }
 
 function removeLink(item) {
@@ -303,6 +398,61 @@ function showNotice(message) {
 
                 <!-- 搜索与列表：数据密集区域使用不透明表面保证可读性 -->
                 <div class="surface-card card">
+                    <!-- 外链巡检条：状态统计、扫描、清理、按状态筛选 -->
+                    <div class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-[var(--color-surface-solid)] px-3 py-2.5">
+                        <span class="text-sm text-ink-2">
+                            外链巡检
+                            <span v-if="health" class="text-ink-3">
+                                · 正常 {{ health.ok }} · <span class="text-danger">失效 {{ health.broken }}</span>
+                                · 未检测 {{ health.unknown }}
+                                <template v-if="health.last_scan_at">· 最近检测 {{ formatTime(health.last_scan_at) }}</template>
+                            </span>
+                        </span>
+                        <div class="ml-auto flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                class="btn btn-secondary btn-sm"
+                                :disabled="scanning"
+                                :title="health?.pending ? `还有 ${health.pending} 条待检` : '所有短链均在有效复检期内'"
+                                @click="scanNow"
+                            >
+                                <span v-if="scanning" class="spinner" aria-hidden="true"></span>
+                                {{ scanning ? '检测中…' : (health?.pending ? `扫描外链（${health.pending} 待检）` : '扫描外链') }}
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-danger btn-sm"
+                                :disabled="cleaning || !health?.broken"
+                                @click="pendingCleanup = true"
+                            >
+                                <span v-if="cleaning" class="spinner" aria-hidden="true"></span>
+                                {{ cleaning ? '清理中…' : `一键清理失效（${health?.broken || 0}）` }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 状态筛选 -->
+                    <div class="mb-4 flex flex-wrap items-center gap-2">
+                        <button
+                            v-for="option in [
+                                { value: '', label: '全部' },
+                                { value: 'broken', label: '失效' },
+                                { value: 'ok', label: '正常' },
+                                { value: 'unknown', label: '未检测' },
+                            ]"
+                            :key="option.value"
+                            type="button"
+                            class="rounded-full px-3 py-1 text-xs font-medium transition-colors"
+                            :class="healthFilter === option.value
+                                ? 'bg-black text-yellow-100 dark:bg-white dark:text-black'
+                                : 'border border-line text-ink-2 hover:bg-black/5 dark:hover:bg-white/10'"
+                            :aria-pressed="healthFilter === option.value"
+                            @click="setHealthFilter(option.value)"
+                        >
+                            {{ option.label }}
+                        </button>
+                    </div>
+
                     <form class="mb-5 flex flex-col gap-3 sm:flex-row" @submit.prevent="search">
                         <input
                             v-model="keyword"
@@ -318,11 +468,12 @@ function showNotice(message) {
                     </form>
 
                     <div class="overflow-x-auto">
-                        <table class="w-full min-w-[720px] text-left text-sm">
+                        <table class="w-full min-w-[820px] text-left text-sm">
                             <thead>
                                 <tr class="border-b border-line text-xs uppercase tracking-wider text-ink-3">
                                     <th class="py-3 pr-3 font-medium">短链接</th>
                                     <th class="py-3 pr-3 font-medium">目标链接</th>
+                                    <th class="py-3 pr-3 font-medium">状态</th>
                                     <th class="py-3 pr-3 font-medium">创建时间</th>
                                     <th class="py-3 pr-3 text-right font-medium">今日</th>
                                     <th class="py-3 pr-3 text-right font-medium">总点击</th>
@@ -331,8 +482,8 @@ function showNotice(message) {
                             </thead>
                             <tbody>
                                 <tr v-if="items.length === 0">
-                                    <td colspan="6" class="py-12 text-center text-ink-3">
-                                        {{ loading ? '加载中…' : '没有匹配的短链' }}
+                                    <td colspan="7" class="py-12 text-center text-ink-3">
+                                        {{ loading ? '加载中…' : (healthFilter === 'broken' ? '没有失效短链' : '没有匹配的短链') }}
                                     </td>
                                 </tr>
                                 <tr
@@ -353,16 +504,39 @@ function showNotice(message) {
                                             :href="item.url"
                                             target="_blank"
                                             rel="noopener"
-                                            class="block truncate text-ink-2 transition-colors hover:text-accent"
+                                            class="block truncate transition-colors hover:text-accent"
+                                            :class="item.health_status === 'broken' ? 'text-danger' : 'text-ink-2'"
                                             :title="item.url"
                                         >{{ item.url }}</a>
+                                    </td>
+                                    <td class="whitespace-nowrap py-3 pr-3">
+                                        <span
+                                            class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+                                            :class="{
+                                                'bg-[var(--color-success-soft)] text-success': item.health_status === 'ok',
+                                                'bg-[var(--color-danger-soft)] text-danger': item.health_status === 'broken',
+                                                'bg-black/5 text-ink-3 dark:bg-white/10': item.health_status === 'unknown',
+                                            }"
+                                            :title="healthTitle(item)"
+                                        >
+                                            <template v-if="item.health_status === 'ok'">正常</template>
+                                            <template v-else-if="item.health_status === 'broken'">
+                                                失效<span v-if="item.health_http_code"> {{ item.health_http_code }}</span>
+                                            </template>
+                                            <template v-else>未检测</template>
+                                        </span>
                                     </td>
                                     <td class="tnum whitespace-nowrap py-3 pr-3 text-ink-3">{{ formatTime(item.created_at) }}</td>
                                     <td class="tnum py-3 pr-3 text-right text-ink-2">{{ item.clicks_today }}</td>
                                     <td class="tnum py-3 pr-3 text-right font-semibold">{{ item.clicks }}</td>
                                     <td class="whitespace-nowrap py-3 text-right">
                                         <button type="button" class="action-btn" @click="openStats(item)">统计</button>
-                                        <button type="button" class="action-btn" @click="editing = item">编辑</button>
+                                        <button
+                                            type="button"
+                                            class="action-btn"
+                                            :class="{ 'text-danger font-medium': item.health_status === 'broken' }"
+                                            @click="editing = item"
+                                        >{{ item.health_status === 'broken' ? '更新链接' : '编辑' }}</button>
                                         <button type="button" class="action-btn action-danger" @click="removeLink(item)">删除</button>
                                     </td>
                                 </tr>
@@ -405,6 +579,17 @@ function showNotice(message) {
                     danger
                     @confirm="confirmRemove"
                     @close="pendingDelete = null"
+                />
+            </transition>
+            <transition name="modal">
+                <ConfirmDialog
+                    v-if="pendingCleanup"
+                    title="清理失效短链"
+                    :message="`将永久删除全部 ${health?.broken || 0} 条已失效短链及其点击记录，此操作不可恢复。若目标地址只是临时不可用，建议先点击「更新链接」改为新地址。`"
+                    confirm-text="确认清理"
+                    danger
+                    @confirm="confirmCleanupBroken"
+                    @close="pendingCleanup = false"
                 />
             </transition>
             <transition name="modal">

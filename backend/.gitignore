@@ -1,6 +1,5 @@
-vendor/
+node_modules/
 .env
 storage/logs/*.log
-.php-cs-fixer.cache
-.phpunit.result.cache
-.phpunit.cache/
+storage/*.sqlite3*
+coverage/

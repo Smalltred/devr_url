@@ -49,6 +49,23 @@ const period = ref('day')
 // 粒度切换只重拉概览，避免整页进入 loading 闪动
 const periodLoading = ref(false)
 
+// 外链巡检
+// 健康状态筛选：'' = 全部，ok / broken / unknown
+const healthFilter = ref('')
+// 健康概览：{ok, broken, unknown, pending, last_scan_at}
+const health = ref(null)
+const scanning = ref(false)
+const cleaning = ref(false)
+// 待确认清理失效链接
+const pendingCleanup = ref(false)
+
+const healthFilters = [
+    { value: '', label: '全部' },
+    { value: 'broken', label: '失效' },
+    { value: 'ok', label: '正常' },
+    { value: 'unknown', label: '未知' },
+]
+
 const tabItems = [
     { value: 'links', label: '短链管理', controls: 'panel-links' },
     { value: 'settings', label: '设置', controls: 'panel-settings' },
@@ -74,12 +91,18 @@ async function refresh() {
     try {
         const [ov, list] = await Promise.all([
             api.fetchOverview(period.value),
-            api.fetchLinks({ page: page.value, per_page: perPage.value, q: appliedKeyword.value }),
+            api.fetchLinks({
+                page: page.value,
+                per_page: perPage.value,
+                q: appliedKeyword.value,
+                health: healthFilter.value || undefined,
+            }),
         ])
         overview.value = ov
         items.value = list.items
         total.value = list.total
         page.value = list.page
+        health.value = list.health || null
         totalPagesMaxGuard()
     } catch (err) {
         if (err.isAuthError) {
@@ -151,6 +174,114 @@ function openStats(code, event) {
 
 function formatTime(value) {
     return typeof value === 'string' ? value.replace('T', ' ').slice(0, 16) : ''
+}
+
+/**
+ * 健康状态徽标的悬浮说明：给出检测结果与时间，便于判断是否需要更新。
+ */
+function healthTitle(item) {
+    if (item.health_status === 'unknown') {
+        return item.health_checked_at
+            ? `无法判定可用性（内网地址或站点限流），检测于 ${formatTime(item.health_checked_at)}`
+            : '尚未检测：点击「扫描外链」开始巡检'
+    }
+    const parts = []
+    parts.push(
+        item.health_status === 'ok'
+            ? '目标可正常访问'
+            : `目标不可访问${item.health_error ? `（${item.health_error}）` : ''}`,
+    )
+    if (item.health_checked_at) {
+        parts.push(`检测于 ${formatTime(item.health_checked_at)}`)
+    }
+
+    return parts.join('，')
+}
+
+/**
+ * 健康状态徽标文案：unknown 区分「从未检测」与「检测过但无法判定」，
+ * 否则用户会以为扫描没生效。
+ */
+function healthLabel(item) {
+    if (item.health_status === 'ok') return '正常'
+    if (item.health_status === 'broken') {
+        return item.health_http_code ? `失效 ${item.health_http_code}` : '失效'
+    }
+
+    return item.health_checked_at ? '无法判定' : '未检测'
+}
+
+/** 健康徽标底色：使用设计令牌，避免在模板里堆内联色值 */
+function healthBadgeBackground(status) {
+    if (status === 'ok') return 'var(--color-success-soft)'
+    if (status === 'broken') return 'var(--color-danger-soft)'
+
+    return 'var(--color-bg-elevated)'
+}
+
+/** 切换健康状态筛选 */
+function setHealthFilter(value) {
+    if (healthFilter.value === value) return
+    healthFilter.value = value
+    page.value = 1
+    refresh()
+}
+
+/**
+ * 扫描一批外链。
+ * 扫描分批进行（每批 20 条、单条最多 8s），一次点击只扫一批并返回剩余待检数，
+ * 用户可继续点击，避免单请求超时。
+ */
+async function scanNow() {
+    if (scanning.value) return
+
+    scanning.value = true
+    try {
+        const result = await api.scanLinks(20)
+        if (result.summary) {
+            health.value = { ...(health.value || {}), ...result.summary, pending: result.remaining }
+        }
+        const parts = [`已检测 ${result.scanned} 条`]
+        if (result.ok > 0) parts.push(`正常 ${result.ok}`)
+        if (result.broken > 0) parts.push(`失效 ${result.broken}`)
+        if (result.skipped > 0) parts.push(`跳过 ${result.skipped}`)
+        if (result.remaining > 0) parts.push(`剩余 ${result.remaining} 条待检`)
+        showNotice(parts.join('，'))
+        await refresh()
+    } catch (err) {
+        if (err.isAuthError) {
+            authState.value = 'login'
+
+            return
+        }
+        showNotice(errorMessage(err, '扫描失败'))
+    } finally {
+        scanning.value = false
+    }
+}
+
+/** 一键清理全部失效短链（含点击记录） */
+async function confirmCleanupBroken() {
+    if (cleaning.value) return
+
+    cleaning.value = true
+    try {
+        const result = await api.cleanupBrokenLinks()
+        health.value = result.health || health.value
+        showNotice(`已清理 ${result.deleted} 条失效短链`)
+        page.value = 1
+        await refresh()
+    } catch (err) {
+        if (err.isAuthError) {
+            authState.value = 'login'
+
+            return
+        }
+        showNotice(errorMessage(err, '清理失败'))
+    } finally {
+        cleaning.value = false
+        pendingCleanup.value = false
+    }
 }
 
 async function onLoggedIn() {
@@ -309,6 +440,49 @@ function showNotice(message) {
 
                 <!-- 数据密集区用不透明表面，保证表格可读性 -->
                 <div class="material-solid card">
+                    <!-- 外链巡检：状态统计 + 扫描 + 一键清理 -->
+                    <div class="material-regular mb-4 flex flex-wrap items-center gap-3 px-3 py-2.5">
+                        <span class="type-sm text-ink-2">
+                            外链巡检
+                            <span v-if="health" class="text-ink-3">
+                                · 正常 {{ health.ok }} · <span class="text-danger">失效 {{ health.broken }}</span>
+                                · 未检测 {{ health.unknown }}
+                                <template v-if="health.last_scan_at">· 最近检测 {{ formatTime(health.last_scan_at) }}</template>
+                            </span>
+                        </span>
+                        <div class="ml-auto flex flex-wrap items-center gap-2">
+                            <AppButton
+                                variant="secondary"
+                                size="sm"
+                                :loading="scanning"
+                                :title="health?.pending ? `还有 ${health.pending} 条待检` : '所有短链均在有效复检期内'"
+                                @click="scanNow"
+                            >
+                                {{ scanning ? '检测中…' : (health?.pending ? `扫描外链（${health.pending}）` : '扫描外链') }}
+                            </AppButton>
+                            <AppButton
+                                variant="danger"
+                                size="sm"
+                                :disabled="!health?.broken"
+                                :loading="cleaning"
+                                @click="pendingCleanup = true"
+                            >
+                                {{ cleaning ? '清理中…' : `一键清理失效（${health?.broken || 0}）` }}
+                            </AppButton>
+                        </div>
+                    </div>
+
+                    <!-- 状态筛选 -->
+                    <div class="mb-4">
+                        <AppSegmented
+                            :model-value="healthFilter"
+                            :items="healthFilters"
+                            mode="group"
+                            label="按外链状态筛选"
+                            @update:model-value="setHealthFilter"
+                        />
+                    </div>
+
                     <form class="mb-5 flex flex-col gap-3 sm:flex-row" @submit.prevent="search">
                         <input
                             v-model="keyword"
@@ -324,11 +498,12 @@ function showNotice(message) {
                     </form>
 
                     <div class="table-bleed overflow-x-auto">
-                        <table class="data-table type-sm w-full min-w-[720px] text-left">
+                        <table class="data-table type-sm w-full min-w-[820px] text-left">
                             <thead>
                                 <tr>
                                     <th class="type-caps py-3 pr-3 text-ink-3">短链接</th>
                                     <th class="type-caps py-3 pr-3 text-ink-3">目标链接</th>
+                                    <th class="type-caps py-3 pr-3 text-ink-3">状态</th>
                                     <th class="type-caps py-3 pr-3 text-ink-3">创建时间</th>
                                     <th class="type-caps py-3 pr-3 text-right text-ink-3">今日</th>
                                     <th class="type-caps py-3 pr-3 text-right text-ink-3">总点击</th>
@@ -337,8 +512,8 @@ function showNotice(message) {
                             </thead>
                             <tbody>
                                 <tr v-if="items.length === 0">
-                                    <td colspan="6" class="py-12 text-center text-ink-3">
-                                        {{ loading ? '加载中…' : '没有匹配的短链' }}
+                                    <td colspan="7" class="py-12 text-center text-ink-3">
+                                        {{ loading ? '加载中…' : (healthFilter === 'broken' ? '没有失效短链' : '没有匹配的短链') }}
                                     </td>
                                 </tr>
                                 <tr
@@ -354,15 +529,30 @@ function showNotice(message) {
                                             class="link font-medium"
                                         >{{ item.code }}</a>
                                     </td>
-                                    <td class="max-w-[280px] py-3 pr-3">
+                                    <td class="max-w-[260px] py-3 pr-3">
                                         <a
                                             :href="item.url"
                                             target="_blank"
                                             rel="noopener"
-                                            class="block truncate text-ink-2"
+                                            class="block truncate"
+                                            :class="item.health_status === 'broken' ? 'text-danger' : 'text-ink-2'"
                                             style="text-decoration: none"
                                             :title="item.url"
                                         >{{ item.url }}</a>
+                                    </td>
+                                    <td class="whitespace-nowrap py-3 pr-3">
+                                        <span
+                                            class="type-xs inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium"
+                                            :class="{
+                                                'text-success': item.health_status === 'ok',
+                                                'text-danger': item.health_status === 'broken',
+                                                'text-ink-3': item.health_status === 'unknown',
+                                            }"
+                                            :style="{ background: healthBadgeBackground(item.health_status) }"
+                                            :title="healthTitle(item)"
+                                        >
+                                            {{ healthLabel(item) }}
+                                        </span>
                                     </td>
                                     <td class="tnum whitespace-nowrap py-3 pr-3 text-ink-3">
                                         {{ formatTime(item.created_at) }}
@@ -378,8 +568,9 @@ function showNotice(message) {
                                         <button
                                             type="button"
                                             class="action-btn"
+                                            :class="{ 'action-danger': item.health_status === 'broken' }"
                                             @click="editing = item"
-                                        >编辑</button>
+                                        >{{ item.health_status === 'broken' ? '更新链接' : '编辑' }}</button>
                                         <button
                                             type="button"
                                             class="action-btn action-danger"
@@ -427,6 +618,16 @@ function showNotice(message) {
             danger
             @confirm="confirmRemove"
             @close="pendingDelete = null"
+        />
+
+        <ConfirmSheet
+            v-if="pendingCleanup"
+            title="清理失效短链"
+            :message="`将永久删除全部 ${health?.broken || 0} 条已失效短链及其点击记录，此操作不可恢复。若目标地址只是临时不可用，建议先点「更新链接」改为新地址。`"
+            confirm-text="确认清理"
+            danger
+            @confirm="confirmCleanupBroken"
+            @close="pendingCleanup = false"
         />
 
         <EditLinkSheet

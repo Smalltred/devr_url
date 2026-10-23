@@ -80,10 +80,28 @@ const fetchOverview = async (period = 'day') => {
 }
 
 /**
- * @param {{page?: number, per_page?: number, q?: string}} params
+ * @param {{page?: number, per_page?: number, q?: string, health?: string}} params
  */
 const fetchLinks = async params => {
     const res = await api.get('/api/admin/links', { params })
+
+    return res.data
+}
+
+/**
+ * 扫描一批外链（检测目标地址是否仍可访问）。
+ *
+ * @param {number} limit 本批条数
+ */
+const scanLinks = async (limit = 20) => {
+    const res = await api.post('/api/admin/links/scan', { limit })
+
+    return res.data
+}
+
+/** 一键清理全部失效短链（含点击记录） */
+const cleanupBrokenLinks = async () => {
+    const res = await api.post('/api/admin/links/cleanup-broken')
 
     return res.data
 }
@@ -165,6 +183,8 @@ export default {
     me,
     fetchOverview,
     fetchLinks,
+    scanLinks,
+    cleanupBrokenLinks,
     updateLink,
     deleteLink,
     fetchLinkStats,

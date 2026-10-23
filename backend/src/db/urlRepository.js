@@ -1,0 +1,218 @@
+/**
+ * 短链仓储（SQLite）：与 PHP 版 SQL 完全一致，保证存量库可直接读写。
+ */
+import { utcDateTime } from './database.js'
+
+/**
+ * LIKE 模式：两侧通配，转义 % _ \；空查询返回 null 表示不过滤。
+ *
+ * @param {string} query
+ */
+function likePattern(query) {
+    const trimmed = (query ?? '').trim()
+    if (trimmed === '') {
+        return null
+    }
+
+    return `%${trimmed.replace(/[\\%_]/g, (char) => `\\${char}`)}%`
+}
+
+export class SqliteUrlRepository {
+    /** @param {import('./database.js').Database} database */
+    constructor(database) {
+        this.database = database
+    }
+
+    nextId() {
+        return this.database.transaction(() => {
+            const row = this.database.get('SELECT id FROM short_url_counter LIMIT 1')
+            const previous = row ? Number(row.id) : 0
+            const next = previous + 1
+
+            if (!row) {
+                this.database.run('INSERT INTO short_url_counter (id) VALUES (?)', next)
+            } else {
+                this.database.run('UPDATE short_url_counter SET id = ? WHERE id = ?', next, previous)
+            }
+
+            return next
+        })
+    }
+
+    save(code, url) {
+        this.database.run('INSERT INTO short_urls (code, url) VALUES (?, ?)', code, url)
+    }
+
+    findByCode(code) {
+        const row = this.database.get('SELECT url FROM short_urls WHERE code = ?', code)
+
+        return row && typeof row.url === 'string' ? row.url : null
+    }
+
+    exists(code) {
+        return this.database.get('SELECT 1 AS ok FROM short_urls WHERE code = ?', code) !== undefined
+    }
+
+    countAll() {
+        const row = this.database.get('SELECT COUNT(*) AS total FROM short_urls')
+
+        return Number(row?.total ?? 0)
+    }
+
+    /**
+     * @param {number} limit
+     * @param {number} offset
+     * @param {string} query
+     * @param {string} healthStatus 空 = 全部
+     */
+    paginate(limit, offset, query, healthStatus = '') {
+        const conditions = []
+        const params = []
+
+        const like = likePattern(query)
+        if (like !== null) {
+            conditions.push("(code LIKE ? ESCAPE '\\' OR url LIKE ? ESCAPE '\\')")
+            params.push(like, like)
+        }
+        if (['ok', 'broken', 'unknown'].includes(healthStatus)) {
+            conditions.push('health_status = ?')
+            params.push(healthStatus)
+        }
+
+        const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
+
+        const totalRow = this.database.get(`SELECT COUNT(*) AS total FROM short_urls ${where}`, ...params)
+        const rows = this.database.all(
+            `SELECT code, url, created_at, health_status, health_http_code, health_checked_at, health_error
+             FROM short_urls ${where}
+             ORDER BY created_at DESC, rowid DESC
+             LIMIT ? OFFSET ?`,
+            ...params,
+            limit,
+            offset,
+        )
+
+        const items = rows.map((row) => ({
+            code: String(row.code),
+            url: String(row.url),
+            created_at: String(row.created_at),
+            health_status: String(row.health_status ?? 'unknown'),
+            health_http_code: row.health_http_code === null || row.health_http_code === undefined
+                ? null
+                : Number(row.health_http_code),
+            health_checked_at: typeof row.health_checked_at === 'string' ? row.health_checked_at : null,
+            health_error: typeof row.health_error === 'string' ? row.health_error : null,
+        }))
+
+        return { items, total: Number(totalRow?.total ?? 0) }
+    }
+
+    /**
+     * 更新目标 URL 与短码；改短码时在同一事务内迁移点击记录。
+     */
+    update(code, newCode, url) {
+        this.database.transaction(() => {
+            this.database.run('UPDATE short_urls SET code = ?, url = ? WHERE code = ?', newCode, url, code)
+            if (newCode !== code) {
+                this.database.run('UPDATE short_url_clicks SET code = ? WHERE code = ?', newCode, code)
+            }
+        })
+    }
+
+    /** 删除短链并级联删除点击记录。 */
+    delete(code) {
+        this.database.transaction(() => {
+            this.database.run('DELETE FROM short_urls WHERE code = ?', code)
+            this.database.run('DELETE FROM short_url_clicks WHERE code = ?', code)
+        })
+    }
+
+    findPendingHealthCheck(limit, staleBefore) {
+        const rows = this.database.all(
+            `SELECT code, url, health_status FROM short_urls
+             WHERE health_checked_at IS NULL OR health_checked_at < ?
+             ORDER BY health_checked_at IS NOT NULL, health_checked_at ASC, rowid ASC
+             LIMIT ?`,
+            staleBefore,
+            limit,
+        )
+
+        return rows.map((row) => ({
+            code: String(row.code),
+            url: String(row.url),
+            health_status: String(row.health_status ?? 'unknown'),
+        }))
+    }
+
+    countPendingHealthCheck(staleBefore) {
+        const row = this.database.get(
+            'SELECT COUNT(*) AS total FROM short_urls WHERE health_checked_at IS NULL OR health_checked_at < ?',
+            staleBefore,
+        )
+
+        return Number(row?.total ?? 0)
+    }
+
+    saveHealthCheck(code, status, httpCode, error) {
+        this.database.run(
+            `UPDATE short_urls
+             SET health_status = ?, health_http_code = ?, health_checked_at = datetime('now'), health_error = ?
+             WHERE code = ?`,
+            status,
+            httpCode,
+            error,
+            code,
+        )
+    }
+
+    touchHealthCheck(code) {
+        this.database.run("UPDATE short_urls SET health_checked_at = datetime('now') WHERE code = ?", code)
+    }
+
+    healthSummary() {
+        const rows = this.database.all('SELECT health_status, COUNT(*) AS total FROM short_urls GROUP BY health_status')
+        const summary = { ok: 0, broken: 0, unknown: 0 }
+        for (const row of rows) {
+            const key = String(row.health_status)
+            if (key in summary) {
+                summary[key] = Number(row.total)
+            }
+        }
+
+        return summary
+    }
+
+    healthScanInfo() {
+        const row = this.database.get('SELECT MIN(health_checked_at) AS first_at, MAX(health_checked_at) AS last_at FROM short_urls')
+
+        return {
+            checked_at: typeof row?.first_at === 'string' ? row.first_at : null,
+            last_scan_at: typeof row?.last_at === 'string' ? row.last_at : null,
+        }
+    }
+
+    codesByHealthStatus(status) {
+        return this.database
+            .all('SELECT code FROM short_urls WHERE health_status = ?', status)
+            .map((row) => String(row.code))
+    }
+
+    /** 批量删除指定状态的短链与点击记录，返回删除条数。 */
+    deleteByHealthStatus(status) {
+        return this.database.transaction(() => {
+            const countRow = this.database.get('SELECT COUNT(*) AS total FROM short_urls WHERE health_status = ?', status)
+            this.database.run(
+                'DELETE FROM short_url_clicks WHERE code IN (SELECT code FROM short_urls WHERE health_status = ?)',
+                status,
+            )
+            this.database.run('DELETE FROM short_urls WHERE health_status = ?', status)
+
+            return Number(countRow?.total ?? 0)
+        })
+    }
+
+    /** 供巡检使用：当前 UTC 时间串 */
+    static staleBefore(staleHours) {
+        return utcDateTime(Date.now() - Math.max(1, staleHours) * 3600 * 1000)
+    }
+}

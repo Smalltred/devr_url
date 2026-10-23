@@ -65,6 +65,18 @@ const updateLink = async (code, payload) => {
     return res.data
 }
 
+// 扫描一批外链（检测目标地址是否仍可访问）
+const scanLinks = async (limit = 20) => {
+    const res = await api.post('/api/admin/links/scan', { limit })
+    return res.data
+}
+
+// 一键清理全部失效短链
+const cleanupBrokenLinks = async () => {
+    const res = await api.post('/api/admin/links/cleanup-broken')
+    return res.data
+}
+
 const deleteLink = async code => {
     const res = await api.delete(`/api/admin/links/${encodeURIComponent(code)}`)
     return res.data
@@ -122,6 +134,8 @@ export default {
     fetchOverview,
     fetchLinks,
     updateLink,
+    scanLinks,
+    cleanupBrokenLinks,
     deleteLink,
     fetchLinkStats,
     fetchSettings,

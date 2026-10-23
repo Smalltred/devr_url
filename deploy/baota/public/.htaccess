@@ -1,9 +1,0 @@
-# 宝塔（Apache）部署：运行目录指向 public/ 后零配置可用。
-# 真实文件/目录由 Apache 直接服务，其余路径交给 index.php（短码跳转与创建接口）。
-<IfModule mod_rewrite.c>
-    RewriteEngine On
-
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule ^ index.php [L]
-</IfModule>

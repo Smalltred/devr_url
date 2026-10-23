@@ -1,0 +1,19 @@
+{
+    "name": "devr-backend",
+    "version": "1.0.0",
+    "private": true,
+    "description": "devr 短链服务后端（Node.js 24 + 内置 SQLite）",
+    "type": "module",
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "scripts": {
+        "start": "node src/server.js",
+        "dev": "node --watch src/server.js",
+        "test": "node --test \"tests/**/*.test.js\"",
+        "scan-links": "node tools/scan-links.js"
+    },
+    "dependencies": {
+        "bcryptjs": "^2.4.3"
+    }
+}
