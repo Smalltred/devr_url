@@ -170,11 +170,16 @@ export function createApp(config, overrides = {}) {
         return Response.json(await admin.scanLinks(limit))
     }))
 
+    // 失效清理：目标不可访问的短链一律视为失效（待确认 + 已判定），一次清空。
+    // cleanup-broken / cleanup-dead 保留为兼容别名。
+    router.post('/api/admin/links/cleanup-invalid', guard(async () => {
+        return Response.json(await admin.cleanupInvalidLinks())
+    }))
+
     router.post('/api/admin/links/cleanup-broken', guard(async () => {
         return Response.json(await admin.cleanupBrokenLinks())
     }))
 
-    // 死链清理：连续失败达到阈值的短链（cleanup-broken 保留为兼容别名）
     router.post('/api/admin/links/cleanup-dead', guard(async () => {
         return Response.json(await admin.cleanupDeadLinks())
     }))

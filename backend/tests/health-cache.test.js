@@ -161,17 +161,31 @@ describe('外链巡检', () => {
         assert.equal(rescan.json.scanned, 0)
     })
 
-    it('一键清理只删除死链，保留待确认失效、正常与无法判定', async () => {
-        const res = await server.request('POST', '/api/admin/links/cleanup-dead', { cookie: token })
+    it('一键清理删除全部失效链接（待确认与已判定不再区分），保留正常与无法判定', async () => {
+        // 失效筛选应同时覆盖已判定失效的条目
+        const before = await server.request('GET', '/api/admin/links?health=invalid', { cookie: token })
+        assert.equal(before.json.total, 2, '失效筛选应包含已判定失效的条目')
+
+        const res = await server.request('POST', '/api/admin/links/cleanup-invalid', { cookie: token })
         assert.equal(res.status, 200)
         assert.equal(res.json.deleted, 2)
-        assert.equal(res.json.health.dead, 0)
+        assert.equal(res.json.health.invalid, 0, '清理后失效计数归零')
 
         const remaining = db.all('SELECT code FROM short_urls ORDER BY code')
         assert.deepEqual(
             remaining.map((row) => row.code),
             ['ok1', 'skip1'],
         )
+    })
+
+    it('兼容别名 cleanup-dead 同样清理待确认失效', async () => {
+        // 造一条待确认失效（未达阈值）与一条正常
+        db.run("UPDATE short_urls SET health_status = 'broken', health_fail_count = 1 WHERE code = 'ok1'")
+
+        const res = await server.request('POST', '/api/admin/links/cleanup-dead', { cookie: token })
+        assert.equal(res.status, 200)
+        assert.equal(res.json.deleted, 1, '别名接口同样清理待确认失效')
+        assert.equal(res.json.health.invalid, 0)
     })
 
     it('时间预算内至少检测一条，剩余留待下一批', async () => {

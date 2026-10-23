@@ -121,7 +121,7 @@ export class SettingsService {
         return Number.isFinite(value) ? Math.max(0, Math.min(59, value)) : this.defaultHealthScanMinute
     }
 
-    /** 连续失败多少次判定为死链（1-10） */
+    /** 连续失败多少次判定为失效（1-10） */
     healthDeadThreshold() {
         const raw = this.all()[SETTINGS_KEYS.healthDeadThreshold]
         const value = raw === undefined ? this.defaultHealthDeadThreshold : Number.parseInt(raw, 10)

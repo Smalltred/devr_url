@@ -50,9 +50,9 @@ const period = ref('day')
 const periodLoading = ref(false)
 
 // 外链巡检
-// 健康状态筛选：'' = 全部，ok / broken / unknown
+// 健康状态筛选：'' = 全部，invalid / ok / unknown
 const healthFilter = ref('')
-// 健康概览：{ok, broken, unknown, pending, last_scan_at}
+// 健康概览：{ok, invalid, unknown, pending, last_scan_at}
 const health = ref(null)
 const scanning = ref(false)
 const cleaning = ref(false)
@@ -61,8 +61,8 @@ const pendingCleanup = ref(false)
 
 const healthFilters = [
     { value: '', label: '全部' },
-    { value: 'dead', label: '死链' },
-    { value: 'broken', label: '失效' },
+    // 「失效」即目标不可访问：待确认与已判定的失效在界面上不再区分
+    { value: 'invalid', label: '失效' },
     { value: 'ok', label: '正常' },
     { value: 'unknown', label: '未知' },
 ]
@@ -186,19 +186,18 @@ function healthTitle(item) {
             ? `无法判定可用性（内网地址或站点限流），检测于 ${formatTime(item.health_checked_at)}`
             : '尚未检测：点击「扫描外链」开始巡检'
     }
-    if (item.health_status === 'dead') {
-        const reason = item.health_error ? `（${item.health_error}）` : ''
 
-        return `连续 ${item.health_fail_count} 次无法访问${reason}，已判定为死链，可一键清理`
+    if (item.health_status === 'ok') {
+        const parts = ['目标可正常访问']
+        if (item.health_checked_at) parts.push(`检测于 ${formatTime(item.health_checked_at)}`)
+
+        return parts.join('，')
     }
-    const parts = []
-    parts.push(
-        item.health_status === 'ok'
-            ? '目标可正常访问'
-            : `目标不可访问${item.health_error ? `（${item.health_error}）` : ''}`,
-    )
-    if (item.health_status === 'broken' && item.health_fail_count > 0) {
-        parts.push(`连续失败 ${item.health_fail_count} 次（达到阈值后判定死链）`)
+
+    // 目标不可访问：无论连续失败几次都统一为「失效」，不区分待确认/已判定
+    const parts = [`目标不可访问${item.health_error ? `（${item.health_error}）` : ''}`]
+    if (item.health_fail_count > 0) {
+        parts.push(`已连续失败 ${item.health_fail_count} 次`)
     }
     if (item.health_checked_at) {
         parts.push(`检测于 ${formatTime(item.health_checked_at)}`)
@@ -207,16 +206,19 @@ function healthTitle(item) {
     return parts.join('，')
 }
 
+/** 目标不可访问：待确认（broken）与已确认（dead）在产品上统一为「失效」 */
+function isInvalidStatus(status) {
+    return status === 'broken' || status === 'dead'
+}
+
 /**
  * 健康状态徽标文案：unknown 区分「从未检测」与「检测过但无法判定」，
  * 否则用户会以为扫描没生效。
+ * 目标不可访问统一显示为「失效」，附 HTTP 状态码便于排查。
  */
 function healthLabel(item) {
     if (item.health_status === 'ok') return '正常'
-    if (item.health_status === 'dead') {
-        return item.health_http_code ? `死链 ${item.health_http_code}` : '死链'
-    }
-    if (item.health_status === 'broken') {
+    if (isInvalidStatus(item.health_status)) {
         return item.health_http_code ? `失效 ${item.health_http_code}` : '失效'
     }
 
@@ -226,7 +228,7 @@ function healthLabel(item) {
 /** 健康徽标底色：使用设计令牌，避免在模板里堆内联色值 */
 function healthBadgeBackground(status) {
     if (status === 'ok') return 'var(--color-success-soft)'
-    if (status === 'broken' || status === 'dead') return 'var(--color-danger-soft)'
+    if (isInvalidStatus(status)) return 'var(--color-danger-soft)'
 
     return 'var(--color-bg-elevated)'
 }
@@ -255,7 +257,8 @@ async function scanNow() {
         }
         const parts = [`已检测 ${result.scanned} 条`]
         if (result.ok > 0) parts.push(`正常 ${result.ok}`)
-        if (result.broken > 0) parts.push(`失效 ${result.broken}`)
+        const invalidCount = (result.broken || 0) + (result.dead || 0)
+        if (invalidCount > 0) parts.push(`失效 ${invalidCount}`)
         if (result.skipped > 0) parts.push(`跳过 ${result.skipped}`)
         if (result.remaining > 0) parts.push(`剩余 ${result.remaining} 条待检`)
         showNotice(parts.join('，'))
@@ -272,15 +275,15 @@ async function scanNow() {
     }
 }
 
-/** 一键清理全部死链（连续失败达到阈值，含点击记录） */
-async function confirmCleanupBroken() {
+/** 一键清理全部失效链接（目标不可访问，含点击记录） */
+async function confirmCleanupInvalid() {
     if (cleaning.value) return
 
     cleaning.value = true
     try {
-        const result = await api.cleanupDeadLinks()
+        const result = await api.cleanupInvalidLinks()
         health.value = result.health || health.value
-        showNotice(`已清理 ${result.deleted} 条死链`)
+        showNotice(`已清理 ${result.deleted} 条失效链接`)
         page.value = 1
         await refresh()
     } catch (err) {
@@ -468,8 +471,9 @@ function showNotice(message) {
                         <span class="type-sm text-ink-2">
                             外链巡检
                             <span v-if="health" class="text-ink-3">
-                                · 正常 {{ health.ok }} · <span class="text-danger">失效 {{ health.broken }}</span>
-                                · <span class="text-danger">死链 {{ health.dead }}</span>
+                                · 正常 {{ health.ok }}
+                                · <span v-if="health.invalid" class="text-danger">失效 {{ health.invalid }}</span>
+                                <span v-else>失效 0</span>
                                 · 未检测 {{ health.unknown }}
                                 <template v-if="health.last_scan_at">· 最近检测 {{ formatTime(health.last_scan_at) }}</template>
                             </span>
@@ -487,11 +491,11 @@ function showNotice(message) {
                             <AppButton
                                 variant="danger"
                                 size="sm"
-                                :disabled="!health?.dead"
+                                :disabled="!health?.invalid"
                                 :loading="cleaning"
                                 @click="pendingCleanup = true"
                             >
-                                {{ cleaning ? '清理中…' : `一键清理死链（${health?.dead || 0}）` }}
+                                {{ cleaning ? '清理中…' : `一键清理失效（${health?.invalid || 0}）` }}
                             </AppButton>
                         </div>
                     </div>
@@ -537,7 +541,7 @@ function showNotice(message) {
                             <tbody>
                                 <tr v-if="items.length === 0">
                                     <td colspan="7" class="py-12 text-center text-ink-3">
-                                        {{ loading ? '加载中…' : (healthFilter === 'dead' ? '没有死链' : (healthFilter === 'broken' ? '没有待确认失效的短链' : '没有匹配的短链')) }}
+                                        {{ loading ? '加载中…' : (healthFilter === 'invalid' ? '没有失效的短链' : '没有匹配的短链') }}
                                     </td>
                                 </tr>
                                 <tr
@@ -559,7 +563,7 @@ function showNotice(message) {
                                             target="_blank"
                                             rel="noopener"
                                             class="block truncate"
-                                            :class="item.health_status === 'broken' ? 'text-danger' : 'text-ink-2'"
+                                            :class="isInvalidStatus(item.health_status) ? 'text-danger' : 'text-ink-2'"
                                             style="text-decoration: none"
                                             :title="item.url"
                                         >{{ item.url }}</a>
@@ -569,7 +573,7 @@ function showNotice(message) {
                                             class="type-xs inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium"
                                             :class="{
                                                 'text-success': item.health_status === 'ok',
-                                                'text-danger': item.health_status === 'broken',
+                                                'text-danger': isInvalidStatus(item.health_status),
                                                 'text-ink-3': item.health_status === 'unknown',
                                             }"
                                             :style="{ background: healthBadgeBackground(item.health_status) }"
@@ -592,9 +596,9 @@ function showNotice(message) {
                                         <button
                                             type="button"
                                             class="action-btn"
-                                            :class="{ 'action-danger': item.health_status === 'broken' }"
+                                            :class="{ 'action-danger': isInvalidStatus(item.health_status) }"
                                             @click="editing = item"
-                                        >{{ item.health_status === 'broken' ? '更新链接' : '编辑' }}</button>
+                                        >{{ isInvalidStatus(item.health_status) ? '更新链接' : '编辑' }}</button>
                                         <button
                                             type="button"
                                             class="action-btn action-danger"
@@ -646,11 +650,11 @@ function showNotice(message) {
 
         <ConfirmSheet
             v-if="pendingCleanup"
-            title="清理死链"
-            :message="`将永久删除全部 ${health?.dead || 0} 条死链（连续 ${health?.dead_threshold || 3} 次检测均无法访问）及其点击记录，此操作不可恢复。若目标地址只是临时不可用，建议先点「更新链接」改为新地址。`"
+            title="清理失效链接"
+            :message="`将永久删除全部 ${health?.invalid || 0} 条失效链接（目标地址当前无法访问）及其点击记录，此操作不可恢复。若目标只是临时不可用，建议先点「更新链接」改为新地址。`"
             confirm-text="确认清理"
             danger
-            @confirm="confirmCleanupBroken"
+            @confirm="confirmCleanupInvalid"
             @close="pendingCleanup = false"
         />
 

@@ -136,7 +136,7 @@ export class AdminService {
         if (Object.prototype.hasOwnProperty.call(body, 'health_dead_threshold')) {
             const threshold = strictInt(body.health_dead_threshold)
             if (threshold === null || threshold < 1 || threshold > 10) {
-                throw validationError('死链判定阈值需为 1-10 的整数')
+                throw validationError('失效确认阈值需为 1-10 的整数')
             }
             values[SETTINGS_KEYS.healthDeadThreshold] = String(threshold)
         }
@@ -189,12 +189,12 @@ export class AdminService {
      * @param {number} page
      * @param {number} perPage
      * @param {string} query
-     * @param {string} healthStatus
+     * @param {string} healthStatus 空 = 全部；invalid = 失效（待确认 + 已判定）
      */
     links(page, perPage, query, healthStatus = '') {
         const safePage = Math.max(1, Number(page) || 1)
         const safePerPage = Math.min(100, Math.max(1, Number(perPage) || 20))
-        const filter = ['ok', 'broken', 'dead', 'unknown'].includes(healthStatus) ? healthStatus : ''
+        const filter = ['ok', 'invalid', 'broken', 'dead', 'unknown'].includes(healthStatus) ? healthStatus : ''
 
         const result = this.urls.paginate(safePerPage, (safePage - 1) * safePerPage, query, filter)
         const codes = result.items.map((item) => item.code)
@@ -310,16 +310,21 @@ export class AdminService {
         return await this.health.scanBatch(limit)
     }
 
-    /** 一键清理全部死链（连续失败达到阈值的短链） */
-    async cleanupDeadLinks() {
-        const deleted = await this.health.cleanupDead()
+    /** 一键清理全部失效链接（待确认 + 已判定，含点击记录） */
+    async cleanupInvalidLinks() {
+        const deleted = await this.health.cleanupInvalid()
 
         return { deleted, health: this.health.overview() }
     }
 
-    /** 兼容旧接口：清理失效短链（现在只清理已判定为死链的条目） */
+    /** 兼容旧接口：cleanup-dead 现与失效清理同义 */
+    async cleanupDeadLinks() {
+        return await this.cleanupInvalidLinks()
+    }
+
+    /** 兼容旧接口 */
     async cleanupBrokenLinks() {
-        return await this.cleanupDeadLinks()
+        return await this.cleanupInvalidLinks()
     }
 
     healthOverview() {

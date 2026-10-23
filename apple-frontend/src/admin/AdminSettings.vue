@@ -195,7 +195,7 @@ function validateSettings() {
 
     const threshold = readInt(healthDeadThreshold.value)
     if (threshold === null || threshold < 1 || threshold > 10) {
-        settingsError.value = '死链判定阈值需为 1-10 的整数'
+        settingsError.value = '失效确认阈值需为 1-10 的整数'
 
         return { payload: null, incomplete: false }
     }
@@ -609,8 +609,8 @@ function formatTime(value) {
                 />
             </div>
             <p class="type-xs text-ink-3">
-                每天在指定时间自动检测短链目标地址是否仍可访问；连续失败达到阈值后判定为「死链」，
-                可在列表页一键清理。时间使用服务器本地时区。
+                每天在指定时间自动检测短链目标地址是否仍可访问；目标不可访问即视为「失效」，
+                可在列表页按「失效」筛选并一键清理。时间使用服务器本地时区。
             </p>
 
             <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -626,7 +626,7 @@ function formatTime(value) {
                     />
                 </div>
                 <div>
-                    <label class="field-label" for="health-dead-threshold">连续失败判定阈值（次）</label>
+                    <label class="field-label" for="health-dead-threshold">失效确认阈值（次）</label>
                     <input
                         id="health-dead-threshold"
                         v-model.number="healthDeadThreshold"
@@ -642,7 +642,7 @@ function formatTime(value) {
             </div>
 
             <p class="type-xs mt-2 text-ink-3">
-                例如阈值 3：连续 3 次检测都连不上（403/404/5xx/连接被终止/超时）才判定死链；
+                例如阈值 3：连续 3 次检测都连不上（403/404/5xx/连接被终止/超时）才判定为失效；
                 中途恢复会清零计数。关闭定时巡检后仍可在列表页手动扫描。
             </p>
         </div>

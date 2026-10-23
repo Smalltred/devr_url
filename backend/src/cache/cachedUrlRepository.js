@@ -113,7 +113,7 @@ export class CachedUrlRepository {
     }
 
     async deleteByHealthStatus(status) {
-        // 先取待删短码逐个失效缓存，避免删除后旧缓存继续跳转到死链
+        // 先取待删短码逐个失效缓存，避免删除后旧缓存继续跳转到失效目标
         for (const code of this.inner.codesByHealthStatus(status)) {
             await this.#safe(() => this.cache.delete(KEY_PREFIX + code), false)
         }

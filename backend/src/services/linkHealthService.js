@@ -19,7 +19,7 @@ export class LinkHealthService {
      * @param {{probe: (url: string) => Promise<{reachable: boolean|null, http_code: number|null, error: string|null}>}} probe
      * @param {import('../support/logger.js').Logger} logger
      * @param {number} [staleHours]
-     * @param {{healthDeadThreshold: () => number}} [settings] 提供死链判定阈值
+     * @param {{healthDeadThreshold: () => number}} [settings] 提供失效确认阈值
      */
     constructor(urls, probe, logger, staleHours = DEFAULT_STALE_HOURS, settings = { healthDeadThreshold: () => 3 }) {
         this.urls = urls
@@ -129,23 +129,36 @@ export class LinkHealthService {
         return totals
     }
 
-    /** 删除全部死链（连续失败达到阈值的短链，含点击记录） */
-    async cleanupDead() {
-        const deleted = await this.urls.deleteByHealthStatus('dead')
+    /**
+     * 删除全部失效链接（含点击记录）。
+     *
+     * 「失效」在产品语义上就是目标不可访问，不再区分「待确认」与「已判定」：
+     * 内部 broken / dead 两种状态只用于决定复检节奏，清理时一并删除。
+     */
+    async cleanupInvalid() {
+        const deleted = await this.urls.deleteByHealthStatus(['broken', 'dead'])
         if (deleted > 0) {
-            this.logger.info('dead links cleaned up', { deleted })
+            this.logger.info('invalid links cleaned up', { deleted })
         }
 
         return deleted
     }
 
-    /** 兼容旧调用 */
+    /** 兼容旧名称：清理死链（现与失效清理同义） */
+    async cleanupDead() {
+        return await this.cleanupInvalid()
+    }
+
+    /** 兼容旧名称 */
     async cleanupBroken() {
-        return await this.cleanupDead()
+        return await this.cleanupInvalid()
     }
 
     /**
      * 巡检概览：各状态数量、待检数量、最近检测时间。
+     *
+     * invalid 是 broken + dead 的合并计数 —— 前端只展示「失效」一个概念。
+     * broken / dead 仍保留在响应里，供排查与内部复检逻辑使用。
      */
     overview() {
         const summary = this.urls.healthSummary()
@@ -153,6 +166,7 @@ export class LinkHealthService {
 
         return {
             ok: summary.ok,
+            invalid: summary.broken + summary.dead,
             broken: summary.broken,
             dead: summary.dead,
             unknown: summary.unknown,

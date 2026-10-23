@@ -74,7 +74,11 @@ export class SqliteUrlRepository {
             conditions.push("(code LIKE ? ESCAPE '\\' OR url LIKE ? ESCAPE '\\')")
             params.push(like, like)
         }
-        if (['ok', 'broken', 'dead', 'unknown'].includes(healthStatus)) {
+        if (healthStatus === 'invalid') {
+            // 失效 = 待确认失效（broken）+ 已确认失效（dead）。
+            // 产品语义上二者不再区分，内部状态只用于决定复检节奏。
+            conditions.push("health_status IN ('broken', 'dead')")
+        } else if (['ok', 'broken', 'dead', 'unknown'].includes(healthStatus)) {
             conditions.push('health_status = ?')
             params.push(healthStatus)
         }
@@ -131,8 +135,8 @@ export class SqliteUrlRepository {
     /**
      * 待检队列：
      * - 从未检测或超过复检窗口的；
-     * - “无法判定”和“尚未达到死链阈值的失效”按短重试窗口再次探测（累计失败次数）；
-     * - 已判定为死链的只按正常复检窗口重试（保留计数，避免频繁骚扰对方站点）。
+     * - “无法判定”和“尚未确认失效的条目”按短重试窗口再次探测（累计失败次数）；
+     * - 已确认失效的只按正常复检窗口重试（保留计数，避免频繁骚扰对方站点）。
      *
      * @param {number} limit
      * @param {string} staleBefore 正常复检窗口起点
@@ -223,21 +227,43 @@ export class SqliteUrlRepository {
         }
     }
 
+    /**
+     * @param {string|string[]} status 单个状态或状态数组
+     * @returns {string[]} 匹配的短码
+     */
     codesByHealthStatus(status) {
+        const statuses = Array.isArray(status) ? status : [status]
+        if (statuses.length === 0) return []
+
+        const placeholders = statuses.map(() => '?').join(', ')
+
         return this.database
-            .all('SELECT code FROM short_urls WHERE health_status = ?', status)
+            .all(`SELECT code FROM short_urls WHERE health_status IN (${placeholders})`, ...statuses)
             .map((row) => String(row.code))
     }
 
-    /** 批量删除指定状态的短链与点击记录，返回删除条数。 */
+    /**
+     * 批量删除指定健康状态的短链与点击记录，返回删除条数。
+     *
+     * @param {string|string[]} status 单个状态或状态数组（失效清理会一次传入
+     *        ['broken','dead']，二者在产品上统称「失效」）
+     */
     deleteByHealthStatus(status) {
+        const statuses = Array.isArray(status) ? status : [status]
+        if (statuses.length === 0) return 0
+
+        const placeholders = statuses.map(() => '?').join(', ')
+
         return this.database.transaction(() => {
-            const countRow = this.database.get('SELECT COUNT(*) AS total FROM short_urls WHERE health_status = ?', status)
-            this.database.run(
-                'DELETE FROM short_url_clicks WHERE code IN (SELECT code FROM short_urls WHERE health_status = ?)',
-                status,
+            const countRow = this.database.get(
+                `SELECT COUNT(*) AS total FROM short_urls WHERE health_status IN (${placeholders})`,
+                ...statuses,
             )
-            this.database.run('DELETE FROM short_urls WHERE health_status = ?', status)
+            this.database.run(
+                `DELETE FROM short_url_clicks WHERE code IN (SELECT code FROM short_urls WHERE health_status IN (${placeholders}))`,
+                ...statuses,
+            )
+            this.database.run(`DELETE FROM short_urls WHERE health_status IN (${placeholders})`, ...statuses)
 
             return Number(countRow?.total ?? 0)
         })

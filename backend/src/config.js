@@ -87,7 +87,7 @@ export function loadConfig() {
             scanEnabled: envBool('HEALTH_SCAN_ENABLED', true),
             scanHour: envInt('HEALTH_SCAN_HOUR', 12),
             scanMinute: envInt('HEALTH_SCAN_MINUTE', 0),
-            // 连续失败达到该次数判定为死链
+            // 连续失败达到该次数判定为失效
             deadThreshold: envInt('HEALTH_DEAD_THRESHOLD', 3),
         },
         auth: {
