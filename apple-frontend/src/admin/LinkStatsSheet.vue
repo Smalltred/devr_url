@@ -70,11 +70,17 @@ function deviceRatio(value) {
     >
         <!-- URL 行在加载期也用骨架占位：它若不占位，数据到达时会额外撑高一行，
              与统计瓦片的高度变化叠加，放大跳变感。
-             高度取 type-sm 的行高，与真实行精确对齐 -->
-        <p v-if="stats" class="type-sm -mt-2 mb-5 truncate text-ink-3" :title="stats.url">
-            {{ stats.url }}
-        </p>
-        <div v-else-if="loading" class="skeleton-bar type-sm -mt-2 mb-5" style="width: 70%">&nbsp;</div>
+             真实行允许换行（break-all）：长 URL 若用 truncate 会被截掉一半，
+             用户无法确认目标地址；换行多占的高度已由下方紧凑间距抵消。 -->
+        <a
+            v-if="stats"
+            :href="stats.url"
+            target="_blank"
+            rel="noopener"
+            class="type-sm -mt-2 mb-4 block break-all text-ink-3 hover:text-accent"
+            :title="stats.url"
+        >{{ stats.url }}</a>
+        <div v-else-if="loading" class="skeleton-bar type-sm -mt-2 mb-4" style="width: 70%">&nbsp;</div>
 
         <p v-if="error" class="field-error" role="alert">{{ error }}</p>
 
@@ -85,7 +91,7 @@ function deviceRatio(value) {
              字号或行高令牌将来调整时，两侧仍会自动对齐。
              `&nbsp;` 用于撑出该字号的行高。 -->
         <div v-else-if="loading" class="stats-skeleton" role="status" aria-label="统计加载中">
-            <div class="mb-6 grid grid-cols-3 gap-3 text-center">
+            <div class="mb-5 grid grid-cols-3 gap-3 text-center">
                 <div v-for="n in 3" :key="n" class="stat-tile">
                     <div class="skeleton-bar type-lg mx-auto" style="width: 2.5rem">&nbsp;</div>
                     <div class="skeleton-bar type-xs mt-1 mx-auto" style="width: 3.5rem">&nbsp;</div>
@@ -96,11 +102,11 @@ function deviceRatio(value) {
             <div class="skeleton-bar type-sm mb-2 font-semibold" style="width: 7rem">&nbsp;</div>
             <!-- 与粒度切换控件同高（segmented: 4px 内边距 + 36px 按钮） -->
             <div class="skeleton-bar mb-3" style="height: 2.75rem; width: 11rem" />
-            <!-- 与 .stat-chart 同高：柱区 96px + 横轴 28px = 124px
-                 （数值与 AppStatBars 的 height 默认值保持一致） -->
-            <div class="skeleton-bar mb-6" style="height: 124px" />
+            <!-- 与 .stat-chart 同高：柱区 72px + 横轴 28px = 100px
+                 （数值与下方 AppStatBars 的 height 属性保持一致） -->
+            <div class="skeleton-bar mb-5" style="height: 100px" />
 
-            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
                     <div class="skeleton-bar type-sm mb-3 font-semibold" style="width: 7rem">&nbsp;</div>
                     <!-- 与空来源区同高（min-height），高度不随条数变化 -->
@@ -120,7 +126,7 @@ function deviceRatio(value) {
             </div>
 
             <!-- 与「创建信息」同高：标题 + 2×2 明细行 -->
-            <div class="mt-6 border-t border-line pt-5">
+            <div class="mt-5 border-t border-line pt-4">
                 <div class="skeleton-bar type-sm mb-3 font-semibold" style="width: 5rem">&nbsp;</div>
                 <div class="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
                     <div v-for="n in 4" :key="n" class="skeleton-bar" style="height: 1.75rem" />
@@ -129,7 +135,7 @@ function deviceRatio(value) {
         </div>
 
         <template v-else-if="stats">
-            <div class="mb-6 grid grid-cols-3 gap-3 text-center">
+            <div class="mb-5 grid grid-cols-3 gap-3 text-center">
                 <div class="stat-tile">
                     <div class="tnum type-lg">{{ stats.total_clicks }}</div>
                     <div class="type-xs mt-1 text-ink-3">总点击</div>
@@ -148,11 +154,11 @@ function deviceRatio(value) {
             <div class="mb-3">
                 <AppPeriodSwitch :model-value="period" @update:model-value="onPeriodChange" />
             </div>
-            <div :class="[periodLoading ? 'opacity-60' : '', 'mb-6 transition-opacity']">
-                <AppStatBars :series="stats.daily" :period="stats.period || period" />
+            <div :class="[periodLoading ? 'opacity-60' : '', 'mb-5 transition-opacity']">
+                <AppStatBars :series="stats.daily" :period="stats.period || period" :height="72" />
             </div>
 
-            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <div>
                     <h3 class="type-sm mb-3 font-semibold">来源域名 Top 10</h3>
                     <!-- 高度随数据自适应（空态只占一行），超过 8.5rem 后内部滚动：
@@ -222,7 +228,7 @@ function deviceRatio(value) {
             </div>
 
             <!-- 创建信息：补齐弹窗底部空白，展示创建者身份、真实 IP 与设备 -->
-            <div class="mt-6 border-t border-line pt-5">
+            <div class="mt-5 border-t border-line pt-4">
                 <h3 class="type-sm mb-3 font-semibold">创建信息</h3>
                 <dl class="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
                     <div class="flex items-baseline justify-between gap-3 border-b border-line pb-1">
