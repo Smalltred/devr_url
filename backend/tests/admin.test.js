@@ -193,6 +193,10 @@ describe('管理后台 · 基础', () => {
             assert.equal(stats.json.referers[0].referer_host, 'google.com')
             assert.equal(stats.json.referers[0].clicks, 2)
             assert.deepEqual(stats.json.devices, { mobile: 1, desktop: 2 })
+            // 直接写库的存量短链没有创建者信息
+            assert.equal(stats.json.creator.type, 'unknown')
+            assert.equal(stats.json.creator.label, '历史数据')
+            assert.equal(stats.json.creator.ip, null)
         }
 
         // 月/年桶起点必须是自然月/年边界
@@ -210,6 +214,61 @@ describe('管理后台 · 基础', () => {
         const res = await server.request('GET', '/api/admin/overview?period=hourly', { cookie: token })
         assert.equal(res.json.period, 'day')
         assert.equal(res.json.daily.length, 14)
+    })
+
+    it('统计记录创建者身份、真实 IP 与设备', async () => {
+        const desktopUa = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        const mobileUa = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+
+        // 游客：代理头里的 X-Real-IP 应作为真实 IP（请求来自回环地址，代理头可信）
+        const guest = await server.request('POST', '/url', {
+            headers: { 'user-agent': desktopUa, 'x-real-ip': '203.0.113.10' },
+            body: { url: 'https://example.com/creator-guest' },
+        })
+        assert.equal(guest.status, 200)
+        const guestStats = await server.request('GET', `/api/admin/links/${guest.json.code}/stats`, { cookie: token })
+        assert.equal(guestStats.status, 200)
+        assert.deepEqual(
+            {
+                type: guestStats.json.creator.type,
+                label: guestStats.json.creator.label,
+                ip: guestStats.json.creator.ip,
+                device: guestStats.json.creator.device,
+            },
+            { type: 'guest', label: '游客', ip: '203.0.113.10', device: '桌面 · Windows · Chrome' },
+        )
+        assert.match(guestStats.json.creator.user_agent, /Chrome\/120/)
+        assert.match(guestStats.json.creator.created_at, /^\d{4}-\d{2}-\d{2} /)
+
+        // 管理员登录后创建
+        const admin = await server.request('POST', '/url', {
+            cookie: token,
+            body: { url: 'https://example.com/creator-admin' },
+        })
+        const adminStats = await server.request('GET', `/api/admin/links/${admin.json.code}/stats`, { cookie: token })
+        assert.equal(adminStats.json.creator.type, 'admin')
+        assert.equal(adminStats.json.creator.label, '管理员（admin）')
+        assert.equal(adminStats.json.creator.name, 'admin')
+
+        // 开放 API：记录 API Key 名称与移动设备
+        const key = await server.request('POST', '/api/admin/keys', { cookie: token, body: { name: 'CI 机器人' } })
+        const open = await server.request('POST', '/api/open/shorten', {
+            headers: {
+                authorization: `Bearer ${key.json.key}`,
+                'user-agent': mobileUa,
+                'x-real-ip': '203.0.113.11',
+            },
+            body: { url: 'https://example.com/creator-key' },
+        })
+        assert.equal(open.status, 200)
+        const openStats = await server.request('GET', `/api/admin/links/${open.json.code}/stats`, { cookie: token })
+        assert.equal(openStats.json.creator.type, 'api_key')
+        assert.equal(openStats.json.creator.label, 'API Key：CI 机器人')
+        assert.equal(openStats.json.creator.ip, '203.0.113.11')
+        assert.equal(openStats.json.creator.device, '移动 · iOS · Safari')
+
+        // 清理本用例创建的 Key，避免影响后续「Key 列表只有 1 个」的断言
+        assert.equal((await server.request('DELETE', `/api/admin/keys/${key.json.id}`, { cookie: token })).status, 200)
     })
 
     it('设置读取与更新校验', async () => {

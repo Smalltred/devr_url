@@ -118,6 +118,14 @@ function deviceRatio(value) {
                     </div>
                 </div>
             </div>
+
+            <!-- 与「创建信息」同高：标题 + 2×2 明细行 -->
+            <div class="mt-6 border-t border-line pt-5">
+                <div class="skeleton-bar type-sm mb-3 font-semibold" style="width: 5rem">&nbsp;</div>
+                <div class="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+                    <div v-for="n in 4" :key="n" class="skeleton-bar" style="height: 1.75rem" />
+                </div>
+            </div>
         </div>
 
         <template v-else-if="stats">
@@ -210,6 +218,35 @@ function deviceRatio(value) {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- 创建信息：补齐弹窗底部空白，展示创建者身份、真实 IP 与设备 -->
+            <div class="mt-6 border-t border-line pt-5">
+                <h3 class="type-sm mb-3 font-semibold">创建信息</h3>
+                <dl class="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+                    <div class="flex items-baseline justify-between gap-3 border-b border-line pb-1">
+                        <dt class="type-xs shrink-0 text-ink-3">创建者</dt>
+                        <dd class="type-sm truncate text-right">{{ stats.creator?.label }}</dd>
+                    </div>
+                    <div class="flex items-baseline justify-between gap-3 border-b border-line pb-1">
+                        <dt class="type-xs shrink-0 text-ink-3">创建 IP</dt>
+                        <dd class="tnum type-sm select-all truncate text-right">{{ stats.creator?.ip || '—' }}</dd>
+                    </div>
+                    <div class="flex items-baseline justify-between gap-3 border-b border-line pb-1">
+                        <dt class="type-xs shrink-0 text-ink-3">设备</dt>
+                        <dd
+                            class="type-sm truncate text-right"
+                            :title="stats.creator?.user_agent || ''"
+                        >{{ stats.creator?.device || '—' }}</dd>
+                    </div>
+                    <div class="flex items-baseline justify-between gap-3 border-b border-line pb-1">
+                        <dt class="type-xs shrink-0 text-ink-3">创建时间（UTC）</dt>
+                        <dd class="tnum type-sm truncate text-right">{{ stats.creator?.created_at || '—' }}</dd>
+                    </div>
+                </dl>
+                <p v-if="stats.creator?.type === 'unknown'" class="type-xs mt-2 text-ink-3">
+                    该短链创建于功能上线前，无法追溯创建者信息。
+                </p>
             </div>
         </template>
     </AppSheet>

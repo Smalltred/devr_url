@@ -24,8 +24,8 @@ export class CachedUrlRepository {
         return this.inner.nextId()
     }
 
-    async save(code, url) {
-        this.inner.save(code, url)
+    async save(code, url, creator = null) {
+        this.inner.save(code, url, creator)
         // 该短码可能刚被负缓存过（不存在的探测），必须清掉
         await this.#safe(() => this.cache.delete(KEY_PREFIX + code), false)
     }
@@ -60,6 +60,11 @@ export class CachedUrlRepository {
 
     exists(code) {
         return this.inner.exists(code)
+    }
+
+    /** 后台统计用元信息：直接查库，避免把创建者信息写入跳转缓存 */
+    findLinkMeta(code) {
+        return this.inner.findLinkMeta(code)
     }
 
     countAll() {

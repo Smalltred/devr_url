@@ -22,13 +22,14 @@ export class ShortUrlService {
 
     /**
      * @param {unknown} rawUrl
+     * @param {?{type: string, name: ?string, ip: ?string, userAgent: ?string}} creator
      * @returns {Promise<{url: string, code: string}>}
      */
-    async create(rawUrl) {
+    async create(rawUrl, creator = null) {
         const url = this.validator.validate(rawUrl)
         const id = this.urls.nextId()
         const code = await this.#generateCode(id)
-        await this.urls.save(code, url)
+        await this.urls.save(code, url, creator)
 
         return { url, code }
     }

@@ -39,14 +39,54 @@ export class SqliteUrlRepository {
         })
     }
 
-    save(code, url) {
-        this.database.run('INSERT INTO short_urls (code, url) VALUES (?, ?)', code, url)
+    /**
+     * @param {string} code
+     * @param {string} url
+     * @param {?{type: string, name: ?string, ip: ?string, userAgent: ?string}} creator
+     */
+    save(code, url, creator = null) {
+        this.database.run(
+            `INSERT INTO short_urls (code, url, creator_type, creator_name, creator_ip, creator_ua)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            code,
+            url,
+            creator?.type ?? null,
+            creator?.name ?? null,
+            creator?.ip ?? null,
+            creator?.userAgent ? String(creator.userAgent).slice(0, 500) : null,
+        )
     }
 
     findByCode(code) {
         const row = this.database.get('SELECT url FROM short_urls WHERE code = ?', code)
 
         return row && typeof row.url === 'string' ? row.url : null
+    }
+
+    /**
+     * 单链元信息（创建者、创建时间）：后台统计使用，不进缓存。
+     *
+     * @param {string} code
+     */
+    findLinkMeta(code) {
+        const row = this.database.get(
+            `SELECT code, url, created_at, creator_type, creator_name, creator_ip, creator_ua
+             FROM short_urls WHERE code = ?`,
+            code,
+        )
+        if (!row) {
+            return null
+        }
+
+        return {
+            code: String(row.code),
+            url: String(row.url),
+            created_at: String(row.created_at),
+            creator_type: typeof row.creator_type === 'string' && row.creator_type !== '' ? row.creator_type : null,
+            creator_name: typeof row.creator_name === 'string' && row.creator_name !== '' ? row.creator_name : null,
+            creator_ip: typeof row.creator_ip === 'string' && row.creator_ip !== '' ? row.creator_ip : null,
+            creator_ua: typeof row.creator_ua === 'string' && row.creator_ua !== '' ? row.creator_ua : null,
+        }
     }
 
     exists(code) {

@@ -67,6 +67,28 @@ describe('SQLite 仓储', () => {
         assert.deepEqual(clicks.totalByCodes(['xyz']), { xyz: 2 })
     })
 
+    it('保存创建者信息并在改码后保留', () => {
+        repo.save('meta', 'https://example.com/meta', {
+            type: 'api_key',
+            name: 'CI',
+            ip: '203.0.113.9',
+            userAgent: 'Mozilla/5.0 Chrome/120.0',
+        })
+        const meta = repo.findLinkMeta('meta')
+        assert.equal(meta.creator_type, 'api_key')
+        assert.equal(meta.creator_name, 'CI')
+        assert.equal(meta.creator_ip, '203.0.113.9')
+        assert.match(meta.creator_ua, /Chrome/)
+
+        repo.update('meta', 'meta2', 'https://changed.example.com/meta')
+
+        assert.equal(repo.findLinkMeta('meta2').creator_name, 'CI')
+        assert.equal(repo.findLinkMeta('meta'), null)
+
+        // 本用例新建的短链不参与后续「待检队列」断言
+        repo.delete('meta2')
+    })
+
     it('删除短链级联删除点击记录', () => {
         repo.save('gone', 'https://example.com/gone')
         clicks.record('gone', { referer: null, referer_host: null, device: 'desktop', ip_hash: null })
@@ -144,12 +166,22 @@ describe('存量库增量迁移', () => {
         const database = new Database(path)
         try {
             const columns = database.all('PRAGMA table_info(short_urls)').map((row) => String(row.name))
-            for (const name of ['health_status', 'health_http_code', 'health_checked_at', 'health_error']) {
+            for (const name of [
+                'health_status',
+                'health_http_code',
+                'health_checked_at',
+                'health_error',
+                'creator_type',
+                'creator_name',
+                'creator_ip',
+                'creator_ua',
+            ]) {
                 assert.ok(columns.includes(name), `缺少列 ${name}`)
             }
 
             const repo = new SqliteUrlRepository(database)
             assert.equal(repo.findByCode('legacy'), 'https://example.com/legacy', '存量数据可读')
+            assert.equal(repo.findLinkMeta('legacy').creator_type, null, '存量短链无创建者信息')
             assert.deepEqual(
                 repo.healthSummary(),
                 { ok: 0, broken: 0, dead: 0, unknown: 1 },

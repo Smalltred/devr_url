@@ -65,23 +65,31 @@ export class ApiKeyService {
 
     /**
      * 鉴权门卫：无效或缺失 Key → 401 Invalid API Key。
+     * 返回 Key 的标识信息，供创建短链时记录创建者。
      *
      * @param {import('../http/request.js').Request} request
+     * @returns {{id: number, name: string}}
      */
     requireValidKey(request) {
         const key = this.keyFromRequest(request)
-        if (!key || !this.authenticate(key)) {
+        const info = key ? this.resolve(key) : null
+        if (info === null) {
             throw unauthorized('Invalid API Key')
         }
+
+        return info
     }
 
     /**
+     * 校验 Key 并返回其标识；无效返回 null。
+     *
      * @param {string} key
+     * @returns {?{id: number, name: string}}
      */
-    authenticate(key) {
+    resolve(key) {
         const id = this.repository.findIdByKeyHash(sha256Hex(key))
         if (id === null) {
-            return false
+            return null
         }
 
         try {
@@ -90,7 +98,16 @@ export class ApiKeyService {
             this.logger.error('api key touch failed', { id, exception: error?.name ?? 'Error' })
         }
 
-        return true
+        const row = this.repository.find(id)
+
+        return { id, name: row && typeof row.name === 'string' ? row.name : '' }
+    }
+
+    /**
+     * @param {string} key
+     */
+    authenticate(key) {
+        return this.resolve(key) !== null
     }
 
     /**

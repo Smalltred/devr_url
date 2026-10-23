@@ -89,17 +89,22 @@ export function createApp(config, overrides = {}) {
     // ---------------------------------------------------------------- 路由
 
     const publicGuard = (handler) => async (request) => {
-        if (settings.requireLogin()) {
+        const authenticated = auth.isAuthenticated(request)
+        if (!authenticated && settings.requireLogin()) {
             auth.requireAuth(request)
         }
         rateLimiter.assertAllowed(request, RequestRateLimiter.SCOPE_CREATE)
+        // 创建者身份：管理员（已登录）或游客；由 createShortUrl 写入短链元信息
+        request.creatorType = authenticated ? 'admin' : 'guest'
+        request.creatorName = authenticated ? config.auth.username : null
 
         return await handler(request)
     }
 
     const openGuard = (handler) => async (request) => {
-        apiKeys.requireValidKey(request)
+        const keyInfo = apiKeys.requireValidKey(request)
         rateLimiter.assertAllowed(request, RequestRateLimiter.SCOPE_CREATE)
+        request.apiKeyName = keyInfo.name
 
         return await handler(request)
     }
@@ -114,7 +119,13 @@ export function createApp(config, overrides = {}) {
     const createShortUrl = async (request) => {
         const body = request.json()
         const url = body && typeof body === 'object' && !Array.isArray(body) ? body.url : null
-        const result = await shortUrls.create(url)
+        const viaApiKey = Object.prototype.hasOwnProperty.call(request, 'apiKeyName')
+        const result = await shortUrls.create(url, {
+            type: viaApiKey ? 'api_key' : (request.creatorType ?? 'guest'),
+            name: viaApiKey ? request.apiKeyName : (request.creatorName ?? null),
+            ip: request.clientIp || null,
+            userAgent: request.header('user-agent') ?? '',
+        })
 
         return Response.json({ url: result.url, code: result.code })
     }

@@ -4,6 +4,7 @@
  */
 import { createServer as createHttpServer } from 'node:http'
 import { Request } from './request.js'
+import { resolveClientIp } from '../support/clientIp.js'
 
 /**
  * @param {{handleRequest: (request: Request) => Promise<import('./response.js').Response>}} app
@@ -68,7 +69,7 @@ export function createServer(app, config) {
                 query: new URLSearchParams(rawQuery),
                 headers: req.headers,
                 rawBody,
-                clientIp: req.socket?.remoteAddress ?? '',
+                clientIp: resolveClientIp(req.socket?.remoteAddress, req.headers, config.security?.trustProxy !== false),
             })
 
             const response = await app.handleRequest(request)

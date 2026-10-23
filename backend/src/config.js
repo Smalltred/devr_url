@@ -53,6 +53,9 @@ export function loadConfig() {
             allowedOrigins: envList('ALLOWED_ORIGINS'),
             csrfAllowMissingOrigin: envBool('CSRF_ALLOW_MISSING_ORIGIN', false),
             ipHashSecret: env('IP_HASH_SECRET', ''),
+            // 默认信任来自回环/私网的反向代理头（X-Real-IP / X-Forwarded-For），
+            // 用于限流与「创建者真实 IP」；直连公网来源不受影响。
+            trustProxy: envBool('TRUST_PROXY', true),
             cspScriptExtra: envList('CSP_SCRIPT_EXTRA').length > 0
                 ? envList('CSP_SCRIPT_EXTRA')
                 : ['https://www.googletagmanager.com'],

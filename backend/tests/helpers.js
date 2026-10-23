@@ -43,6 +43,7 @@ export function baseConfig(dbPath, distIndex) {
             allowedOrigins: [],
             csrfAllowMissingOrigin: false,
             ipHashSecret: '',
+            trustProxy: true,
             cspScriptExtra: [],
             cspConnectExtra: [],
             hstsMaxAge: 0,

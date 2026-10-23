@@ -4,6 +4,7 @@
  */
 import { SETTINGS_KEYS } from './settingsService.js'
 import { conflictError, notFoundCode, validationError } from '../support/errors.js'
+import { describeUserAgent } from '../support/userAgent.js'
 
 const RESERVED_CODES = ['admin']
 const CODE_PATTERN = /^[0-9A-Za-z]{1,32}$/
@@ -296,6 +297,7 @@ export class AdminService {
         }
 
         const normalized = AdminService.normalizePeriod(period)
+        const meta = await this.urls.findLinkMeta(code)
 
         return {
             code,
@@ -310,6 +312,7 @@ export class AdminService {
             ),
             referers: this.clicks.topRefererHosts(code, 10),
             devices: this.clicks.deviceSplit(code),
+            creator: AdminService.creatorView(meta),
         }
     }
 
@@ -342,6 +345,38 @@ export class AdminService {
     }
 
     // ---------------------------------------------------------------- 内部
+
+    /**
+     * 创建者视图：游客 / 管理员 / API Key 名称，附带真实 IP 与设备标签。
+     * 功能上线前的存量短链没有这些列，显示为「历史数据」。
+     *
+     * @param {?object} meta
+     */
+    static creatorView(meta) {
+        const type = meta?.creator_type ?? null
+        const name = meta?.creator_name ?? null
+        const device = describeUserAgent(meta?.creator_ua ?? '')
+
+        let label = '历史数据'
+        if (type === 'api_key') {
+            label = name ? `API Key：${name}` : 'API Key'
+        } else if (type === 'admin') {
+            label = name ? `管理员（${name}）` : '管理员'
+        } else if (type === 'guest') {
+            label = '游客'
+        }
+
+        return {
+            type: type ?? 'unknown',
+            label,
+            name,
+            ip: meta?.creator_ip ?? null,
+            device: device.label,
+            device_type: device.type,
+            user_agent: meta?.creator_ua ?? null,
+            created_at: meta?.created_at ?? null,
+        }
+    }
 
     #assertCodeValid(code) {
         if (code === '') {

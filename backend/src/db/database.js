@@ -15,6 +15,10 @@ const SCHEMA = [
         code TEXT PRIMARY KEY,
         url TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        creator_type TEXT,
+        creator_name TEXT,
+        creator_ip TEXT,
+        creator_ua TEXT,
         health_status TEXT NOT NULL DEFAULT 'unknown',
         health_http_code INTEGER,
         health_checked_at TEXT,
@@ -66,6 +70,10 @@ const SCHEMA = [
 /** 存量库增量列（SQLite 不支持 ADD COLUMN IF NOT EXISTS，按 PRAGMA 判断） */
 const COLUMN_MIGRATIONS = {
     short_urls: {
+        creator_type: 'TEXT',
+        creator_name: 'TEXT',
+        creator_ip: 'TEXT',
+        creator_ua: 'TEXT',
         health_status: "TEXT NOT NULL DEFAULT 'unknown'",
         health_http_code: 'INTEGER',
         health_checked_at: 'TEXT',
