@@ -67,7 +67,9 @@ apple-frontend/
 
 **材质**：按 thin/regular/thick/solid 分层表达层级，顶部高光边模拟光线；
 压暗层与模糊层分离，动画只走 opacity（改 background alpha 会让 backdrop-filter 每帧重算，
-实测掉到 18fps）。
+实测掉到 18fps）。**同一容器内不叠材质**：实心卡片（`material-solid`）内部不要再套
+regular/thin 材质层——两层半透明背景会互相干扰、降低对比度；内部区块用间距与排版分组即可
+（如后台列表的巡检工具行）。
 
 **排版**：字号 + 字距 + 行高 三元组，大字号负字距、小字号正字距；间距用 rem 尊重用户字号设置。
 
