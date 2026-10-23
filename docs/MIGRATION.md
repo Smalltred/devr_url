@@ -60,8 +60,10 @@
 
 ### 1.4 新增能力（本次重写引入）
 
-- **外链巡检**：定时（默认每小时一轮）检测目标地址，结果写入 `short_urls.health_*`，**从不自动删除数据**；
-  后台可按状态筛选、手动分批扫描、更新失效链接、一键清理失效项；
+- **外链巡检**：每日定时（默认 12:00，后台可改时刻、开关与阈值）检测目标地址，
+  结果写入 `short_urls.health_*`，**从不自动删除数据**；同一短链连续失败达到阈值（默认 3 次）
+  才判定为「死链」，成功一次即清零计数；
+  后台可按状态（死链 / 失效 / 正常 / 未知）筛选、手动分批扫描、更新失效链接、一键清理死链；
   判定口径与安全边界（拒绝内网/环回地址、防 DNS 重绑定、不跟随跳转、不读响应体）见 README「外链巡检」；
 - **`GET /healthz`**：返回 `{"ok":true,"links":N}`，供容器探活与监控；
 - **手动补扫工具**：`cd backend && npm run scan-links -- --budget=600`。
@@ -70,7 +72,7 @@
 
 | 变化 | 变量 |
 | --- | --- |
-| 新增 | `HEALTH_TIMEOUT_SECONDS`、`HEALTH_CONNECT_TIMEOUT_SECONDS`、`HEALTH_STALE_HOURS`、`HEALTH_BATCH_SIZE`、`HEALTH_SCAN_ENABLED`、`HEALTH_SCAN_INTERVAL_SECONDS` |
+| 新增 | `HEALTH_TIMEOUT_SECONDS`、`HEALTH_CONNECT_TIMEOUT_SECONDS`、`HEALTH_STALE_HOURS`、`HEALTH_BATCH_SIZE`、`HEALTH_SCAN_ENABLED`、`HEALTH_SCAN_HOUR`、`HEALTH_SCAN_MINUTE`、`HEALTH_DEAD_THRESHOLD` |
 | 语义调整 | `MEMCACHED_SERVERS`（不再依赖 PHP 扩展，服务不可用即降级）；`ADMIN_PASSWORD_HASH` 兼容 `$2y$`/`$2b$` |
 | 保持不变 | 其余全部变量含义与默认值不变（`APP_*`、`DATABASE_PATH`、`ADMIN_*`、`CACHE_*`、`CSRF_*`、`ALLOWED_ORIGINS`、`MAX_BODY_BYTES`、`CREATE_RATE_LIMIT_*`、`IP_HASH_SECRET`、`PRIVACY_STORE_REFERER`、`HSTS_MAX_AGE`、`CSP_*`、`DIST_INDEX`、`VITE_API_BASE_URL`） |
 
@@ -158,7 +160,7 @@
 | （无） | DIST_INDEX | `/admin` 返回的 SPA 入口路径 |
 | （无） | CACHE_DRIVER / MEMCACHED_SERVERS / CACHE_TTL / CACHE_NEGATIVE_TTL / MEMCACHED_TIMEOUT_MS | 短链跳转缓存（Memcached，可降级为直连数据库） |
 | （无） | ALLOWED_ORIGINS / CSRF_ALLOW_MISSING_ORIGIN / MAX_BODY_BYTES / CREATE_RATE_LIMIT_MAX / CREATE_RATE_LIMIT_WINDOW / IP_HASH_SECRET / PRIVACY_STORE_REFERER / HSTS_MAX_AGE | 安全加固相关配置 |
-| （无） | HEALTH_TIMEOUT_SECONDS / HEALTH_CONNECT_TIMEOUT_SECONDS / HEALTH_STALE_HOURS / HEALTH_BATCH_SIZE / HEALTH_SCAN_ENABLED / HEALTH_SCAN_INTERVAL_SECONDS | 外链巡检配置（进程内定时任务） |
+| （无） | HEALTH_TIMEOUT_SECONDS / HEALTH_CONNECT_TIMEOUT_SECONDS / HEALTH_STALE_HOURS / HEALTH_BATCH_SIZE / HEALTH_SCAN_ENABLED / HEALTH_SCAN_HOUR / HEALTH_SCAN_MINUTE / HEALTH_DEAD_THRESHOLD | 外链巡检配置（进程内定时任务） |
 
 `.env` 加载顺序：`backend/.env` → 项目根 `.env`（先找到的生效）；真实环境变量始终优先于 `.env`。
 

@@ -239,17 +239,20 @@ GET /api/admin/links?page=1&per_page=20&q=关键词
 
 ```json
 {
-    "health_status": "broken",
+    "health_status": "dead",
     "health_http_code": 404,
     "health_checked_at": "2026-10-23 02:46:00",
-    "health_error": "HTTP 404"
+    "health_error": "HTTP 404",
+    "health_fail_count": 3
 }
 ```
 
-- `health_status`：`ok` 正常 / `broken` 失效 / `unknown` 未检测或无法判定；
-- 响应另含 `health` 汇总：`{"ok": 2, "broken": 3, "unknown": 1, "pending": 0, "last_scan_at": "..."}`。
+- `health_status`：`ok` 正常 / `broken` 失效（尚未达到死链阈值）/ `dead` 死链 / `unknown` 未检测或无法判定；
+- `health_fail_count`：连续失败次数，成功一次即清零；
+- 响应另含 `health` 汇总：
+  `{"ok": 2, "broken": 1, "dead": 3, "unknown": 1, "pending": 0, "last_scan_at": "...", "dead_threshold": 3}`。
 
-支持按状态过滤：`GET /api/admin/links?health=broken`（可选 `ok` / `unknown`）。
+支持按状态过滤：`GET /api/admin/links?health=broken`（可选 `ok` / `dead` / `unknown`）。
 
 ### 扫描外链（分批）
 
@@ -264,26 +267,28 @@ Content-Type: application/json
 
 ```json
 {
-    "scanned": 20, "ok": 15, "broken": 4, "skipped": 1,
+    "scanned": 20, "ok": 15, "broken": 3, "dead": 1, "skipped": 1,
     "remaining": 8,
-    "summary": {"ok": 120, "broken": 4, "unknown": 3}
+    "summary": {"ok": 120, "broken": 3, "dead": 1, "unknown": 3}
 }
 ```
 
 `skipped` 为无法判定的条目（限流/内网地址/瞬时故障），不覆盖原状态；
 `remaining` 为仍在复检间隔外、待下一批检测的数量。
 
-### 一键清理失效短链
+### 一键清理死链
 
 ```http
-POST /api/admin/links/cleanup-broken
+POST /api/admin/links/cleanup-dead
 ```
 
-删除全部 `health_status=broken` 的短链及其点击记录，成功返回：
+删除全部 `health_status=dead` 的短链及其点击记录（连续失败达到阈值的才会计入），成功返回：
 
 ```json
-{"deleted": 4, "health": {"ok": 120, "broken": 0, "unknown": 3, "pending": 0, "last_scan_at": "..."}}
+{"deleted": 3, "health": {"ok": 120, "broken": 1, "dead": 0, "unknown": 3, "pending": 0, "last_scan_at": "...", "dead_threshold": 3}}
 ```
+
+> 兼容别名：`POST /api/admin/links/cleanup-broken` 行为相同（只清理死链）。
 
 ### 编辑短链
 
@@ -350,7 +355,11 @@ GET /api/admin/settings
         "available": true,
         "servers": ["127.0.0.1:11211"],
         "stats": {"hits": 128, "misses": 12, "items": 42}
-    }
+    },
+    "health_scan_enabled": true,
+    "health_scan_hour": 12,
+    "health_scan_minute": 0,
+    "health_dead_threshold": 3
 }
 ```
 
@@ -363,7 +372,7 @@ GET /api/admin/settings
 PUT /api/admin/settings
 Content-Type: application/json
 
-{"code_min_length": 4, "code_random": true, "require_login": false, "cache_ttl": 600, "cache_negative_ttl": 45}
+{"code_min_length": 4, "code_random": true, "require_login": false, "cache_ttl": 600, "cache_negative_ttl": 45, "health_scan_hour": 12, "health_scan_minute": 0, "health_dead_threshold": 3}
 ```
 
 各键均可省略（保持原值）。规则：
@@ -372,7 +381,11 @@ Content-Type: application/json
 - `code_random`：布尔。开启后新短码随机生成（要求有效长度 ≥ 3，否则 400，落库前查重）；
 - `require_login`：布尔。开启后 `POST /url`、`POST /api/url` 需登录，未登录返回 401；
 - `cache_ttl`：0-86400 的整数（秒），短链跳转结果的缓存有效期，0 = 不缓存；
-- `cache_negative_ttl`：0-3600 的整数（秒），缓存“短码不存在”的时长（抵御扫描流量），0 = 关闭。
+- `cache_negative_ttl`：0-3600 的整数（秒），缓存“短码不存在”的时长（抵御扫描流量），0 = 关闭；
+- `health_scan_enabled`：布尔，是否启用每日定时巡检；
+- `health_scan_hour`：0-23 的整数，每日巡检小时（服务器本地时间）；
+- `health_scan_minute`：0-59 的整数，每日巡检分钟；
+- `health_dead_threshold`：1-10 的整数，连续失败多少次判定为死链（默认 3）。
 
 成功（200）返回保存后的设置视图。设置持久化于 SQLite，即时生效，无需重启。
 管理后台「设置」页对上述各项采用**改动即自动保存**（防抖合并多次输入，无保存按钮），

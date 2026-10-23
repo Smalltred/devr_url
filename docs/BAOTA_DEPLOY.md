@@ -64,9 +64,11 @@ ADMIN_PASSWORD=你的强密码
 # DATABASE_PATH=
 # 缓存（可选）
 # MEMCACHED_SERVERS=127.0.0.1:11211
-# 外链巡检（进程内定时任务，默认每小时一轮）
+# 外链巡检（进程内每日定时任务，默认 12:00；后台「设置」页可改）
 # HEALTH_SCAN_ENABLED=true
-# HEALTH_SCAN_INTERVAL_SECONDS=3600
+# HEALTH_SCAN_HOUR=12
+# HEALTH_SCAN_MINUTE=0
+# HEALTH_DEAD_THRESHOLD=3
 ```
 
 目录权限（Node 进程需要写 SQLite）：
