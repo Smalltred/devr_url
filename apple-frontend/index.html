@@ -3,11 +3,94 @@
 
 <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48 64x64" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- SEO：标题、摘要与关键词。构建时由 vite.config.js 把 %SITE_URL% 换成正式域名 -->
+    <title>Devr 短链接 - 免费在线短链接生成工具，链接永久有效</title>
+    <meta name="description" content="Devr 是一款免费、简单易用的在线短链接生成工具，支持自定义短码、二维码下载、点击统计与外链失效巡检。生成的短链接永久有效，适合微信、QQ、短信与网页分享。" />
+    <meta name="keywords" content="短链接,短网址,短链生成,网址缩短,免费短链接,自定义短码,二维码生成,点击统计,Devr" />
+    <meta name="author" content="Devr" />
+    <meta name="application-name" content="Devr 短链接" />
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <meta name="applicable-device" content="pc,mobile" />
+    <meta name="format-detection" content="telephone=no,email=no,address=no" />
+    <link rel="canonical" href="%SITE_URL%/" />
+
+    <!-- Open Graph：QQ、微信、微博、Discord、Slack 等分享卡片 -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Devr 短链接" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:title" content="Devr 短链接 - 免费在线短链接生成工具" />
+    <meta property="og:description" content="免费在线短链接生成工具，支持自定义短码、二维码下载与点击统计，链接永久有效。" />
+    <meta property="og:url" content="%SITE_URL%/" />
+    <meta property="og:image" content="%SITE_URL%/og-cover.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Devr 短链接 - 简单易用的短链接生成工具" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Devr 短链接 - 免费在线短链接生成工具" />
+    <meta name="twitter:description" content="免费在线短链接生成工具，支持自定义短码、二维码下载与点击统计，链接永久有效。" />
+    <meta name="twitter:image" content="%SITE_URL%/og-cover.png" />
+
+    <!-- 微信 / QQ 旧版抓取器会读取 itemprop 与 image_src -->
+    <meta itemprop="name" content="Devr 短链接 - 免费在线短链接生成工具" />
+    <meta itemprop="description" content="免费在线短链接生成工具，支持自定义短码、二维码下载与点击统计，链接永久有效。" />
+    <meta itemprop="image" content="%SITE_URL%/og-cover.png" />
+    <link rel="image_src" href="%SITE_URL%/share-thumb.png" />
+
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f7fb" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1117" />
+    <meta name="apple-mobile-web-app-title" content="Devr 短链接" />
+    <link rel="apple-touch-icon" href="/logo100.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- 结构化数据：搜索引擎可据此生成站点与应用信息 -->
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@graph": [
+                {
+                    "@type": "WebSite",
+                    "@id": "%SITE_URL%/#website",
+                    "url": "%SITE_URL%/",
+                    "name": "Devr 短链接",
+                    "description": "免费、简单易用的在线短链接生成工具，链接永久有效。",
+                    "inLanguage": "zh-CN",
+                    "publisher": { "@id": "%SITE_URL%/#organization" }
+                },
+                {
+                    "@type": "Organization",
+                    "@id": "%SITE_URL%/#organization",
+                    "name": "Devr",
+                    "url": "%SITE_URL%/",
+                    "logo": "%SITE_URL%/logo100.png"
+                },
+                {
+                    "@type": "WebApplication",
+                    "@id": "%SITE_URL%/#app",
+                    "name": "Devr 短链接",
+                    "url": "%SITE_URL%/",
+                    "description": "支持自定义短码、二维码下载、点击统计与外链失效巡检的免费短链接生成工具。",
+                    "applicationCategory": "UtilitiesApplication",
+                    "operatingSystem": "Any",
+                    "browserRequirements": "Requires JavaScript",
+                    "inLanguage": "zh-CN",
+                    "image": "%SITE_URL%/og-cover.png",
+                    "offers": {
+                        "@type": "Offer",
+                        "price": "0",
+                        "priceCurrency": "CNY"
+                    }
+                }
+            ]
+        }
+    </script>
+
     <script>
         // 首帧渲染前应用主题，避免深色模式白屏闪烁。
         // 与旧前端共用 devr-theme 键：在 3000/3100 之间切换时主题保持一致。
@@ -21,9 +104,6 @@
             } catch (e) { /* localStorage 不可用时保持浅色 */ }
         })();
     </script>
-    <meta name="description" content="Devr —— 简单易用的短链接生成工具，链接永久有效！" />
-    <link rel="apple-touch-icon" href="/logo100.png" />
-    <link rel="manifest" href="/manifest.json" />
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-03H85HPZC9"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
@@ -31,11 +111,14 @@
         gtag('js', new Date());
         gtag('config', 'G-03H85HPZC9');
     </script>
-    <title>Devr</title>
 </head>
 
 <body>
-    <noscript>本站需要启用 JavaScript 才能使用。</noscript>
+    <noscript>
+        <h1>Devr 短链接</h1>
+        <p>Devr 是一款免费、简单易用的在线短链接生成工具，支持自定义短码、二维码下载、点击统计与外链失效巡检，生成的短链接永久有效。</p>
+        <p>本站需要启用 JavaScript 才能生成短链接，请启用后刷新页面。</p>
+    </noscript>
     <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
 </body>

@@ -9,6 +9,7 @@
 # Node backend runtime data
 /backend/.env
 /backend/storage/logs/*.log
+/backend/storage/*.log
 /backend/storage/*.sqlite3*
 
 # testing

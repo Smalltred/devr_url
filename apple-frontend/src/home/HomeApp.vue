@@ -30,5 +30,8 @@ onMounted(async () => {
             <HomeSearch />
             <HomeResult />
         </main>
+        <footer class="type-xs pb-6 pt-10 text-center text-ink-3">
+            Devr 提供免费短链接生成、自定义短码、二维码下载、点击统计与外链失效巡检。
+        </footer>
     </div>
 </template>

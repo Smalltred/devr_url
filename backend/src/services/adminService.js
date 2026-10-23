@@ -57,6 +57,8 @@ export class AdminService {
         return {
             code_min_length: this.settings.codeMinLength(),
             code_random: this.settings.codeRandom(),
+            // guest_access_enabled 为规范设置；require_login 保留给旧前端/调用方（二者互斥）
+            guest_access_enabled: this.settings.guestAccessEnabled(),
             require_login: this.settings.requireLogin(),
             password_source: this.settings.hasCustomPassword() ? 'custom' : 'env',
             cache_ttl: this.settings.cacheTtl(),
@@ -93,8 +95,16 @@ export class AdminService {
             values[SETTINGS_KEYS.codeRandom] = AdminService.normalizeBool(body.code_random) ? '1' : '0'
         }
 
-        if (Object.prototype.hasOwnProperty.call(body, 'require_login')) {
-            values[SETTINGS_KEYS.requireLogin] = AdminService.normalizeBool(body.require_login) ? '1' : '0'
+        // 游客访问开关：新旧两个键同时写入并保持互斥，读取以 guest_access_enabled 为准
+        let guestAccess = null
+        if (Object.prototype.hasOwnProperty.call(body, 'guest_access_enabled')) {
+            guestAccess = AdminService.normalizeBool(body.guest_access_enabled)
+        } else if (Object.prototype.hasOwnProperty.call(body, 'require_login')) {
+            guestAccess = !AdminService.normalizeBool(body.require_login)
+        }
+        if (guestAccess !== null) {
+            values[SETTINGS_KEYS.guestAccess] = guestAccess ? '1' : '0'
+            values[SETTINGS_KEYS.requireLogin] = guestAccess ? '0' : '1'
         }
 
         if (Object.prototype.hasOwnProperty.call(body, 'cache_ttl')) {

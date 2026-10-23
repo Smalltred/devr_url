@@ -20,7 +20,8 @@ const emit = defineEmits(['password-changed', 'notice'])
 // 短链设置
 const codeMinLength = ref(1)
 const codeRandom = ref(false)
-const requireLogin = ref(false)
+// 游客访问：默认开启；关闭后等价于「创建短链需要登录」
+const guestAccessEnabled = ref(true)
 const passwordSource = ref('env')
 const settingsError = ref('')
 const savingSettings = ref(false)
@@ -82,7 +83,10 @@ onUnmounted(() => {
 function applySettings(data) {
     codeMinLength.value = data.code_min_length
     codeRandom.value = Boolean(data.code_random)
-    requireLogin.value = Boolean(data.require_login)
+    // 兼容旧后端：没有 guest_access_enabled 时用 require_login 反推
+    guestAccessEnabled.value = Boolean(
+        data.guest_access_enabled !== undefined ? data.guest_access_enabled : !data.require_login
+    )
     passwordSource.value = data.password_source || 'env'
     cacheTtl.value = data.cache_ttl ?? 300
     cacheNegativeTtl.value = data.cache_negative_ttl ?? 30
@@ -121,7 +125,9 @@ function canonicalPayload(data) {
     return {
         code_min_length: data.code_min_length,
         code_random: Boolean(data.code_random),
-        require_login: Boolean(data.require_login),
+        guest_access_enabled: Boolean(
+            data.guest_access_enabled !== undefined ? data.guest_access_enabled : !data.require_login
+        ),
         cache_ttl: data.cache_ttl ?? 300,
         cache_negative_ttl: data.cache_negative_ttl ?? 30,
         health_scan_enabled: data.health_scan_enabled !== false,
@@ -213,7 +219,7 @@ function validateSettings() {
         payload: {
             code_min_length: minLength,
             code_random: codeRandom.value,
-            require_login: requireLogin.value,
+            guest_access_enabled: guestAccessEnabled.value,
             cache_ttl: ttl,
             cache_negative_ttl: negativeTtl,
             health_scan_enabled: healthScanEnabled.value,
@@ -338,8 +344,8 @@ function toggleCodeRandom(next) {
     flushSettingsSave()
 }
 
-function toggleRequireLogin(next) {
-    requireLogin.value = next
+function toggleGuestAccess(next) {
+    guestAccessEnabled.value = next
     flushSettingsSave()
 }
 
@@ -475,13 +481,13 @@ function formatTime(value) {
 
                 <div class="mb-6 flex items-start justify-between gap-4 border-t border-line pt-5">
                     <div>
-                        <div class="type-sm font-medium">创建短链需要登录</div>
-                        <p class="field-hint">开启后首页仅管理员可生成短链，未登录访问首页将跳转登录页</p>
+                        <div class="type-sm font-medium">允许游客访问</div>
+                        <p class="field-hint">开启后未登录访客可访问首页并生成短链；关闭后仅管理员可用，未登录访问首页将跳转登录页</p>
                     </div>
                     <AppSwitch
-                        :model-value="requireLogin"
-                        label="创建短链需要登录"
-                        @update:model-value="toggleRequireLogin"
+                        :model-value="guestAccessEnabled"
+                        label="允许游客访问"
+                        @update:model-value="toggleGuestAccess"
                     />
                 </div>
 

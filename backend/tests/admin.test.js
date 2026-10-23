@@ -219,6 +219,9 @@ describe('管理后台 · 基础', () => {
         assert.equal(view.json.cache_ttl, 300)
         assert.equal(view.json.password_source, 'env')
         assert.equal(view.json.cache.driver, 'null')
+        // 游客访问默认开启（与旧 require_login 互斥）
+        assert.equal(view.json.guest_access_enabled, true)
+        assert.equal(view.json.require_login, false)
         // 每日巡检默认 12:00、连续 3 次失败判定死链
         assert.equal(view.json.health_scan_enabled, true)
         assert.equal(view.json.health_scan_hour, 12)
@@ -399,14 +402,16 @@ describe('管理后台 · 登录门控', () => {
         await server.close()
     })
 
-    it('开启 require_login 后未登录创建被拒，开放 API 不受影响', async () => {
+    it('关闭游客访问后未登录创建被拒，开放 API 不受影响', async () => {
         const token = await server.login()
 
+        // 旧键 require_login 仍兼容：true 等价于关闭游客访问
         const enabled = await server.request('PUT', '/api/admin/settings', {
             cookie: token,
             body: { require_login: true },
         })
         assert.equal(enabled.json.require_login, true)
+        assert.equal(enabled.json.guest_access_enabled, false)
 
         const anonymous = await server.request('POST', '/url', { body: { url: 'https://example.com/gated' } })
         assert.equal(anonymous.status, 401)
@@ -423,5 +428,17 @@ describe('管理后台 · 登录门控', () => {
             body: { url: 'https://example.com/open-gated' },
         })
         assert.equal(open.status, 200, '开放 API 用 Key 鉴权，不受 require_login 影响')
+
+        // 规范键 guest_access_enabled 重新开启，两个键保持互斥
+        const reopened = await server.request('PUT', '/api/admin/settings', {
+            cookie: token,
+            body: { guest_access_enabled: true },
+        })
+        assert.equal(reopened.json.guest_access_enabled, true)
+        assert.equal(reopened.json.require_login, false)
+
+        const guest = await server.request('POST', '/url', { body: { url: 'https://example.com/guest-back' } })
+        assert.equal(guest.status, 200)
+        assert.equal((await server.request('GET', '/api/auth/me')).json.require_login, false)
     })
 })

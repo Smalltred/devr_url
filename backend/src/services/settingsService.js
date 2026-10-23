@@ -8,6 +8,7 @@ export const SETTINGS_KEYS = {
     codeMinLength: 'code_min_length',
     codeRandom: 'code_random',
     requireLogin: 'require_login',
+    guestAccess: 'guest_access_enabled',
     adminPasswordHash: 'admin_password_hash',
     cacheTtl: 'cache_ttl',
     cacheNegativeTtl: 'cache_negative_ttl',
@@ -72,8 +73,28 @@ export class SettingsService {
         return this.#flag(SETTINGS_KEYS.codeRandom)
     }
 
+    /**
+     * 是否允许游客（未登录访客）访问首页并创建短链。
+     *
+     * 新键 `guest_access_enabled` 是规范来源；存量部署只有旧的 `require_login`，
+     * 缺省时按 `!require_login` 推导，保证升级后行为不变。
+     */
+    guestAccessEnabled() {
+        const all = this.all()
+        if (Object.prototype.hasOwnProperty.call(all, SETTINGS_KEYS.guestAccess)) {
+            const raw = all[SETTINGS_KEYS.guestAccess]
+
+            return raw === '1' || raw === 'true'
+        }
+
+        return !this.#flag(SETTINGS_KEYS.requireLogin)
+    }
+
+    /**
+     * 创建短链是否需要登录（guest_access_enabled 的反义；保留该键以兼容旧前端与 API 调用方）。
+     */
     requireLogin() {
-        return this.#flag(SETTINGS_KEYS.requireLogin)
+        return !this.guestAccessEnabled()
     }
 
     adminPasswordHash() {

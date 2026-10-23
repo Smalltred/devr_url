@@ -84,9 +84,8 @@ async function submit() {
                 {{ submitting ? '登录中…' : '登 录' }}
             </AppButton>
 
-            <p class="type-sm mt-6 text-center text-ink-3">
-                <a v-if="props.homeAccessible" href="/" class="link">← 返回首页</a>
-                <span v-else>本站已开启登录访问，首页对未登录用户不可见</span>
+            <p v-if="props.homeAccessible" class="type-sm mt-6 text-center text-ink-3">
+                <a href="/" class="link">← 返回首页</a>
             </p>
         </form>
     </div>

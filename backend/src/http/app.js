@@ -268,7 +268,16 @@ export function createApp(config, overrides = {}) {
             return Response.text('Frontend build not found. Run "npm run build" first.', 404)
         }
 
-        return Response.html(html)
+        // 后台不参与搜索收录：静态 index.html 是给首页用的，
+        // 这里在返回前换成 noindex，并同时下发响应头（爬虫优先看头部）
+        html = html.replace(
+            /<meta\s+name=["']robots["'][^>]*>/i,
+            '<meta name="robots" content="noindex, nofollow">',
+        )
+        const response = Response.html(html)
+        response.headers['x-robots-tag'] = 'noindex, nofollow'
+
+        return response
     })
 
     // 短码跳转（单段兜底，必须最后注册）
@@ -288,7 +297,11 @@ export function createApp(config, overrides = {}) {
             }
         }
 
-        return Response.redirect(originUrl)
+        // 短链只负责跳转，不应被搜索引擎当作独立页面收录（避免与目标页重复）
+        const response = Response.redirect(originUrl)
+        response.headers['x-robots-tag'] = 'noindex, nofollow'
+
+        return response
     })
 
     // ---------------------------------------------------------------- 请求入口
