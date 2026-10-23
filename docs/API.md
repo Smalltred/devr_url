@@ -113,6 +113,7 @@ GET /healthz
 | 创建频次 | 公开接口与开放 API 共用计数，默认 60 次/分钟/IP，超出 `429`；`CREATE_RATE_LIMIT_MAX=0` 关闭。 |
 | 安全响应头 | 所有响应带 CSP、`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy`、`Permissions-Policy`；`HSTS_MAX_AGE>0` 且请求为 HTTPS 时追加 HSTS。 |
 | 来源统计 | 默认只保存来源域名（`referer_host`），不保存完整 Referer（可能含查询串密钥）；`PRIVACY_STORE_REFERER=true` 可改回完整保存。 |
+| 创建者信息 | 创建短链时记录创建者身份、真实 IP 与 User-Agent（用于后台统计，仅管理员可查）；点击 IP 仍只保存匿名哈希。反向代理部署下默认信任来自回环/私网的 `X-Real-IP`、`X-Forwarded-For`；如应用直接暴露公网可设 `TRUST_PROXY=false` 关闭。 |
 
 ## curl 示例
 
@@ -336,9 +337,27 @@ GET /api/admin/links/{code}/stats?period=day
     "period": "day",
     "daily": [{"date": "2026-09-22", "clicks": 0}],
     "referers": [{"referer_host": "google.com", "clicks": 66}],
-    "devices": {"mobile": 52, "desktop": 68}
+    "devices": {"mobile": 52, "desktop": 68},
+    "creator": {
+        "type": "api_key",
+        "label": "API Key：CI 机器人",
+        "name": "CI 机器人",
+        "ip": "203.0.113.10",
+        "device": "桌面 · Windows · Chrome",
+        "device_type": "desktop",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...",
+        "created_at": "2026-10-23 09:15:00"
+    }
 }
 ```
+
+`creator` 为该短链的创建信息（仅管理员可见）：
+
+- `type`：`guest`（游客）、`admin`（管理员）、`api_key`（开放 API）、`unknown`（功能上线前的存量数据）；
+- `label`：用于展示的创建者名称，API Key 取创建时填写的 Key 名称；
+- `ip`：创建短链时的真实客户端 IP（反向代理下读取 `X-Real-IP` / `X-Forwarded-For`，见下）；
+- `device` / `device_type`：由创建时的 User-Agent 粗解析出的设备、系统与浏览器；
+- `created_at`：创建时间（UTC）。
 
 ### 站点设置
 
@@ -415,7 +434,8 @@ Content-Type: application/json
 
 `GET /{code}` 跳转成功时自动记录一条点击（时间 UTC、来源域名、设备 mobile/desktop、
 IP 匿名哈希 sha256(ip+盐) 前 24 位用于独立访客估算）。HEAD 请求不计数；采集失败不影响跳转。
-原始 IP 与 User-Agent 不入库。
+点击记录不落原始 IP 与 User-Agent；创建短链时会另记录创建者身份、创建 IP 与 User-Agent，
+仅在后台单链统计中可见（见上文 `creator` 字段）。
 
 ## 开放 API
 

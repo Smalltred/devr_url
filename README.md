@@ -29,7 +29,7 @@ Demo 地址 👉 [u.hecady.com](https://u.hecady.com)
 - **外链巡检**：进程内定时检测目标地址是否仍可访问（403/404/410/5xx/超时记为失效），
   后台可按状态筛选、一键清理失效项或就地更新链接；默认 24 小时复检一次；
 - **点击统计**：跳转时自动记录点击（UTC 日切分、来源域名、设备类型、IP 匿名哈希估算独立访客），
-  原始 IP 与 User-Agent 不入库；
+  点击不落原始 IP 与 User-Agent；创建短链时另记录创建者身份、真实 IP 与设备，供后台单链统计查看；
 - **SEO 与分享卡片**：内置 title/description、canonical、Open Graph、Twitter Card、微信/QQ 抓取器读取的
   `itemprop` 与 300×300 缩略图、JSON-LD 结构化数据；构建时生成 `robots.txt` 与 `sitemap.xml`。
   后台与短码跳转统一标记 `noindex`，避免短链与目标页重复收录；
@@ -151,7 +151,7 @@ VITE_SITE_URL=https://your-domain.com
 访问 `/admin` 进入管理面板（首页页头也有入口），支持：
 
 - **登录**：单管理员账号，凭据由环境变量配置；登录态为 HttpOnly + SameSite=Strict Cookie，有效期默认 7 天；
-- **统计**：全站概览（短链总数/累计/今日点击）、趋势（日/周/月/年可切换）、点击 Top 10；单链维度含独立访客、来源域名 Top 10、设备分布（统计按 UTC 口径聚合）；
+- **统计**：全站概览（短链总数/累计/今日点击）、趋势（日/周/月/年可切换）、点击 Top 10；单链维度含独立访客、来源域名 Top 10、设备分布，以及创建者身份（游客 / 管理员 / API Key 名称）、创建 IP 与创建设备（统计按 UTC 口径聚合）；
 - **编辑**：修改目标链接与短码（改短码后旧码立即失效，点击统计自动迁移）；
 - **删除**：删除短链并级联清除点击记录。
 
@@ -291,6 +291,7 @@ node deploy/build-baota-package.mjs   # 生成 baota-package/ 与 baota-package.
 | CREATE_RATE_LIMIT_MAX | 60 | 单 IP 在窗口内允许创建的短链数；0 = 关闭限流 |
 | CREATE_RATE_LIMIT_WINDOW | 60 | 创建限流窗口（秒） |
 | PRIVACY_STORE_REFERER | false | 是否保存完整 Referer；默认仅保存来源域名 |
+| TRUST_PROXY | true | 信任来自回环/私网的反向代理头（`X-Real-IP`/`X-Forwarded-For`），用于真实 IP 与限流；应用直接暴露公网时设为 false |
 | HSTS_MAX_AGE | 0 | HSTS 有效期（秒）；确认全站 HTTPS 后设为 31536000 |
 | CSP_SCRIPT_EXTRA | 空 | CSP 额外放行的脚本来源；留空默认放行 Google Analytics |
 | CSP_CONNECT_EXTRA | 空 | 跨域部署时加入 CSP connect-src 的后端源 |

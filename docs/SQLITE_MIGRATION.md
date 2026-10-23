@@ -37,7 +37,7 @@ CREATE TABLE short_url_counter (
 
 | 表 | 用途 |
 | --- | --- |
-| `short_urls` | 短码 → 原链接；另含外链巡检列 `health_status`（`ok` / `broken` / `dead` / `unknown`，其中 `broken` 与 `dead` 在产品上统称「失效」，仅用于决定复检节奏）、`health_http_code`、`health_checked_at`、`health_error`、`health_fail_count`（连续失败次数） |
+| `short_urls` | 短码 → 原链接；含创建者元信息 `creator_type`（guest/admin/api_key）、`creator_name`、`creator_ip`、`creator_ua`；另含外链巡检列 `health_status`（`ok` / `broken` / `dead` / `unknown`，其中 `broken` 与 `dead` 在产品上统称「失效」，仅用于决定复检节奏）、`health_http_code`、`health_checked_at`、`health_error`、`health_fail_count`（连续失败次数） |
 | `short_url_counter` | 单行自增计数器（短码 ID 源） |
 | `short_url_clicks` | 点击记录（时间、referer、referer_host、device、ip_hash），带 code+time 与 time 两个索引 |
 | `auth_tokens` | 管理端登录态（token 的 sha256 哈希、创建/过期时间戳） |
