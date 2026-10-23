@@ -247,12 +247,15 @@ GET /api/admin/links?page=1&per_page=20&q=关键词
 }
 ```
 
-- `health_status`：`ok` 正常 / `broken` 失效（尚未达到死链阈值）/ `dead` 死链 / `unknown` 未检测或无法判定；
+- `health_status`：`ok` 正常 / `broken` 失效（待确认）/ `dead` 失效（已确认）/ `unknown` 未检测或无法判定；
+  产品上 `broken` 与 `dead` 统一称「失效」，两个状态只用于内部决定复检节奏；
 - `health_fail_count`：连续失败次数，成功一次即清零；
 - 响应另含 `health` 汇总：
-  `{"ok": 2, "broken": 1, "dead": 3, "unknown": 1, "pending": 0, "last_scan_at": "...", "dead_threshold": 3}`。
+  `{"ok": 2, "invalid": 4, "broken": 1, "dead": 3, "unknown": 1, "pending": 0, "last_scan_at": "...", "dead_threshold": 3}`，
+  其中 `invalid = broken + dead`。
 
-支持按状态过滤：`GET /api/admin/links?health=broken`（可选 `ok` / `dead` / `unknown`）。
+支持按状态过滤：`GET /api/admin/links?health=invalid`（失效，含 `broken` 与 `dead`；
+也可传 `ok` / `broken` / `dead` / `unknown`）。
 
 ### 扫描外链（分批）
 
@@ -276,19 +279,20 @@ Content-Type: application/json
 `skipped` 为无法判定的条目（限流/内网地址/瞬时故障），不覆盖原状态；
 `remaining` 为仍在复检间隔外、待下一批检测的数量。
 
-### 一键清理死链
+### 一键清理失效链接
 
 ```http
-POST /api/admin/links/cleanup-dead
+POST /api/admin/links/cleanup-invalid
 ```
 
-删除全部 `health_status=dead` 的短链及其点击记录（连续失败达到阈值的才会计入），成功返回：
+删除全部失效短链（`health_status` 为 `broken` 或 `dead`）及其点击记录，成功返回：
 
 ```json
-{"deleted": 3, "health": {"ok": 120, "broken": 1, "dead": 0, "unknown": 3, "pending": 0, "last_scan_at": "...", "dead_threshold": 3}}
+{"deleted": 4, "health": {"ok": 120, "invalid": 0, "broken": 0, "dead": 0, "unknown": 3, "pending": 0, "last_scan_at": "...", "dead_threshold": 3}}
 ```
 
-> 兼容别名：`POST /api/admin/links/cleanup-broken` 行为相同（只清理死链）。
+> 兼容别名：`POST /api/admin/links/cleanup-dead`、`POST /api/admin/links/cleanup-broken`
+> 行为相同（均清理全部失效链接）。
 
 ### 编辑短链
 
@@ -385,7 +389,7 @@ Content-Type: application/json
 - `health_scan_enabled`：布尔，是否启用每日定时巡检；
 - `health_scan_hour`：0-23 的整数，每日巡检小时（服务器本地时间）；
 - `health_scan_minute`：0-59 的整数，每日巡检分钟；
-- `health_dead_threshold`：1-10 的整数，连续失败多少次判定为死链（默认 3）。
+- `health_dead_threshold`：1-10 的整数，连续失败多少次判定为失效（默认 3）。
 
 成功（200）返回保存后的设置视图。设置持久化于 SQLite，即时生效，无需重启。
 管理后台「设置」页对上述各项采用**改动即自动保存**（防抖合并多次输入，无保存按钮），
