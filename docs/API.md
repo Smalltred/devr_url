@@ -336,7 +336,7 @@ GET /api/admin/links/{code}/stats?period=day
     "visitors": 87,
     "period": "day",
     "daily": [{"date": "2026-09-22", "clicks": 0}],
-    "referers": [{"referer_host": "google.com", "clicks": 66}],
+    "referers": [{"referer_host": "google.com", "clicks": 66}, {"referer_host": null, "clicks": 12}],
     "devices": {"mobile": 52, "desktop": 68},
     "creator": {
         "type": "api_key",
@@ -434,6 +434,9 @@ Content-Type: application/json
 
 `GET /{code}` 跳转成功时自动记录一条点击（时间 UTC、来源域名、设备 mobile/desktop、
 IP 匿名哈希 sha256(ip+盐) 前 24 位用于独立访客估算）。HEAD 请求不计数；采集失败不影响跳转。
+来源优先取 `Referer`，缺失时退回 `Origin`；两者都没有（聊天软件直接打开、地址栏输入等）
+记为 `referer_host: null`，后台显示为「直接访问」。设备优先参考 `Sec-CH-UA-Mobile`，
+其次按 UA 判断（Mobile / iPad / Tablet 均计入移动端）。
 点击记录不落原始 IP 与 User-Agent；创建短链时会另记录创建者身份、创建 IP 与 User-Agent，
 仅在后台单链统计中可见（见上文 `creator` 字段）。
 

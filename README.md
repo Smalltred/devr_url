@@ -28,8 +28,9 @@ Demo 地址 👉 [u.hecady.com](https://u.hecady.com)
   支持缓存有效期与负缓存配置，服务不可用时自动降级为直连数据库，跳转不受影响；
 - **外链巡检**：进程内定时检测目标地址是否仍可访问（403/404/410/5xx/超时记为失效），
   后台可按状态筛选、一键清理失效项或就地更新链接；默认 24 小时复检一次；
-- **点击统计**：跳转时自动记录点击（UTC 日切分、来源域名、设备类型、IP 匿名哈希估算独立访客），
-  点击不落原始 IP 与 User-Agent；创建短链时另记录创建者身份、真实 IP 与设备，供后台单链统计查看；
+- **点击统计**：跳转时自动记录点击（UTC 日切分、来源域名、设备类型、IP 匿名哈希估算独立访客；
+  无 Referer/Origin 的访问归入「直接访问」，设备判断优先参考 `Sec-CH-UA-Mobile`，
+  移动端含 iPad/Android 平板），点击不落原始 IP 与 User-Agent；创建短链时另记录创建者身份、真实 IP 与设备，供后台单链统计查看；
 - **SEO 与分享卡片**：内置 title/description、canonical、Open Graph、Twitter Card、微信/QQ 抓取器读取的
   `itemprop` 与 300×300 缩略图、JSON-LD 结构化数据；构建时生成 `robots.txt` 与 `sitemap.xml`。
   后台与短码跳转统一标记 `noindex`，避免短链与目标页重复收录；
