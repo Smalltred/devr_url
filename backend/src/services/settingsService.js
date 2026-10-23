@@ -11,6 +11,10 @@ export const SETTINGS_KEYS = {
     adminPasswordHash: 'admin_password_hash',
     cacheTtl: 'cache_ttl',
     cacheNegativeTtl: 'cache_negative_ttl',
+    healthScanEnabled: 'health_scan_enabled',
+    healthScanHour: 'health_scan_hour',
+    healthScanMinute: 'health_scan_minute',
+    healthDeadThreshold: 'health_dead_threshold',
 }
 
 const DEFAULTS = {
@@ -22,12 +26,19 @@ const DEFAULTS = {
 export class SettingsService {
     /**
      * @param {{all: () => Record<string,string>, set: (k: string, v: string) => void}} repository
-     * @param {{cacheTtl?: number, cacheNegativeTtl?: number}} [defaults]
+     * @param {{
+     *   cacheTtl?: number, cacheNegativeTtl?: number,
+     *   healthScanEnabled?: boolean, healthScanHour?: number, healthScanMinute?: number, healthDeadThreshold?: number
+     * }} [defaults]
      */
     constructor(repository, defaults = {}) {
         this.repository = repository
         this.defaultCacheTtl = defaults.cacheTtl ?? 300
         this.defaultNegativeTtl = defaults.cacheNegativeTtl ?? 30
+        this.defaultHealthScanEnabled = defaults.healthScanEnabled ?? true
+        this.defaultHealthScanHour = defaults.healthScanHour ?? 12
+        this.defaultHealthScanMinute = defaults.healthScanMinute ?? 0
+        this.defaultHealthDeadThreshold = defaults.healthDeadThreshold ?? 3
         this.cache = null
         this.cachedAt = 0
     }
@@ -85,6 +96,37 @@ export class SettingsService {
         const value = raw === undefined ? this.defaultNegativeTtl : Number.parseInt(raw, 10)
 
         return Number.isFinite(value) ? Math.max(0, Math.min(3600, value)) : this.defaultNegativeTtl
+    }
+
+    /** 是否启用每日定时巡检 */
+    healthScanEnabled() {
+        const raw = this.all()[SETTINGS_KEYS.healthScanEnabled]
+
+        return raw === undefined ? this.defaultHealthScanEnabled : raw === '1' || raw === 'true'
+    }
+
+    /** 每日巡检小时（0-23，服务器本地时间） */
+    healthScanHour() {
+        const raw = this.all()[SETTINGS_KEYS.healthScanHour]
+        const value = raw === undefined ? this.defaultHealthScanHour : Number.parseInt(raw, 10)
+
+        return Number.isFinite(value) ? Math.max(0, Math.min(23, value)) : this.defaultHealthScanHour
+    }
+
+    /** 每日巡检分钟（0-59） */
+    healthScanMinute() {
+        const raw = this.all()[SETTINGS_KEYS.healthScanMinute]
+        const value = raw === undefined ? this.defaultHealthScanMinute : Number.parseInt(raw, 10)
+
+        return Number.isFinite(value) ? Math.max(0, Math.min(59, value)) : this.defaultHealthScanMinute
+    }
+
+    /** 连续失败多少次判定为死链（1-10） */
+    healthDeadThreshold() {
+        const raw = this.all()[SETTINGS_KEYS.healthDeadThreshold]
+        const value = raw === undefined ? this.defaultHealthDeadThreshold : Number.parseInt(raw, 10)
+
+        return Number.isFinite(value) ? Math.max(1, Math.min(10, value)) : this.defaultHealthDeadThreshold
     }
 
     /**

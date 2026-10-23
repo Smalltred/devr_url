@@ -14,7 +14,25 @@ const props = defineProps({
     /** 粒度：day / week / month / year，决定横轴标签与文案 */
     period: { type: String, default: 'day' },
     height: { type: Number, default: 96 },
+    /**
+     * 填充模式：图表纵向撑满父容器剩余高度。
+     * 用于「趋势卡片与右侧 Top 10 并排」的场景 —— 网格会让两张卡片等高，
+     * 若图表固定 96px，下方就会留下一大片空白。
+     * 此时 height 退化为最小高度（窄屏/内容不足时兜底）。
+     */
+    fill: { type: Boolean, default: false },
 })
+
+/** 非填充模式给柱区固定高度；填充模式由 flex 撑开，不写内联高度 */
+const barsStyle = computed(() => (props.fill ? undefined : { height: `${props.height}px` }))
+
+/** 空状态需与柱状态等高，否则「有无数据」会改变容器高度 */
+const emptyStyle = computed(
+    () => (props.fill ? undefined : { height: `${props.height + 28}px` }),
+)
+
+/** 填充模式下的最小高度：柱区 + 横轴行，保证窄屏仍有可用高度 */
+const fillMinHeight = computed(() => `${props.height + 28}px`)
 
 const activeIndex = ref(-1)
 
@@ -74,18 +92,22 @@ function formatLabel(date) {
 </script>
 
 <template>
-    <figure class="stat-chart">
+    <figure
+        class="stat-chart"
+        :class="{ 'is-fill': fill }"
+        :style="fill ? { minHeight: fillMinHeight } : undefined"
+    >
         <!-- 空状态：给出原因与下一步，而不是留一片空白。
              高度与柱状态严格一致（柱区 + 横轴行），
              否则「无数据 / 有数据」会改变图表容器高度，
              进而传导到弹窗高度 —— 数据异步到达时就会看到弹窗位移。 -->
-        <div v-if="isEmpty" class="stat-empty" :style="{ height: height + 28 + 'px' }" role="status">
+        <div v-if="isEmpty" class="stat-empty" :style="emptyStyle" role="status">
             <span>该时段内暂无点击</span>
             <span class="stat-empty-hint">切换到其他粒度，或等待短链被访问后此处将显示趋势</span>
         </div>
 
         <template v-else>
-            <div class="stat-bars" :style="{ height: height + 'px' }" role="img" :aria-label="summary">
+            <div class="stat-bars" :style="barsStyle" role="img" :aria-label="summary">
                 <button
                     v-for="(point, index) in series"
                     :key="point.date"
@@ -139,6 +161,28 @@ function formatLabel(date) {
 <style scoped>
 .stat-chart {
     margin: 0;
+}
+
+/* 填充模式：图表成为纵向 flex 容器，柱区吃掉卡片剩余高度。
+   柱区高度由 flex 解析为确定值，柱子的百分比高度因此仍能正确计算。 */
+.stat-chart.is-fill {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.stat-chart.is-fill .stat-bars {
+    flex: 1 1 auto;
+    /* 允许收缩到比内容更小，否则窄屏会顶破卡片 */
+    min-height: 0;
+}
+
+.stat-chart.is-fill .stat-empty {
+    flex: 1 1 auto;
+}
+
+.stat-chart.is-fill .stat-axis {
+    flex: none;
 }
 
 .stat-bars {

@@ -83,6 +83,25 @@ export class SqliteMetaRepository {
             value,
         )
     }
+
+    /**
+     * 原子的“抢占式”写入：仅当当前值不等于 $value 时写入并返回 true。
+     * 用于多进程下保证每日定时任务只执行一次。
+     *
+     * @param {string} key
+     * @param {string} value
+     */
+    claim(key, value) {
+        const result = this.database.run(
+            `INSERT INTO app_meta (key, value) VALUES (?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value
+             WHERE app_meta.value != excluded.value`,
+            key,
+            value,
+        )
+
+        return Number(result.changes) > 0
+    }
 }
 
 /**

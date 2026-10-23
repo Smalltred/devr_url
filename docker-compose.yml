@@ -3,7 +3,7 @@
 #   docker compose up -d --build
 #   访问 http://localhost:3001
 # 数据库文件在命名卷 app-data 中（容器内 /app/backend/storage），重建容器不丢数据。
-# 外链巡检在 Node 进程内定时执行（HEALTH_SCAN_INTERVAL_SECONDS），无需额外的定时任务容器。
+# 外链巡检在 Node 进程内每日定时执行（默认 12:00，后台可改），无需额外的定时任务容器。
 services:
   web:
     build:
@@ -38,9 +38,11 @@ services:
       MEMCACHED_SERVERS: memcached:11211
       CACHE_TTL: ${CACHE_TTL:-300}
       CACHE_NEGATIVE_TTL: ${CACHE_NEGATIVE_TTL:-30}
-      # 外链巡检：进程内定时任务
+      # 外链巡检：进程内每日定时任务（默认 12:00，后台「设置」页可改）
       HEALTH_SCAN_ENABLED: ${HEALTH_SCAN_ENABLED:-true}
-      HEALTH_SCAN_INTERVAL_SECONDS: ${HEALTH_SCAN_INTERVAL_SECONDS:-3600}
+      HEALTH_SCAN_HOUR: ${HEALTH_SCAN_HOUR:-12}
+      HEALTH_SCAN_MINUTE: ${HEALTH_SCAN_MINUTE:-0}
+      HEALTH_DEAD_THRESHOLD: ${HEALTH_DEAD_THRESHOLD:-3}
       HEALTH_STALE_HOURS: ${HEALTH_STALE_HOURS:-24}
       HEALTH_BATCH_SIZE: ${HEALTH_BATCH_SIZE:-20}
       # DATABASE_PATH 留空使用默认值 /app/backend/storage/short-url.sqlite3

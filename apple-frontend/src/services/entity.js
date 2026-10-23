@@ -99,12 +99,15 @@ const scanLinks = async (limit = 20) => {
     return res.data
 }
 
-/** 一键清理全部失效短链（含点击记录） */
-const cleanupBrokenLinks = async () => {
-    const res = await api.post('/api/admin/links/cleanup-broken')
+/** 一键清理全部死链（连续失败达到阈值的短链，含点击记录） */
+const cleanupDeadLinks = async () => {
+    const res = await api.post('/api/admin/links/cleanup-dead')
 
     return res.data
 }
+
+/** 兼容旧名称（后端语义已改为只清理死链） */
+const cleanupBrokenLinks = cleanupDeadLinks
 
 const updateLink = async (code, payload) => {
     const res = await api.put(`/api/admin/links/${encodeURIComponent(code)}`, payload)
@@ -184,6 +187,7 @@ export default {
     fetchOverview,
     fetchLinks,
     scanLinks,
+    cleanupDeadLinks,
     cleanupBrokenLinks,
     updateLink,
     deleteLink,

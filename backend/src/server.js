@@ -1,8 +1,9 @@
 /**
  * 服务入口：加载 .env → 装配应用 → 启动 HTTP 服务与进程内巡检定时任务。
  *
- * 与 PHP 版环境变量完全兼容；新增 HEALTH_SCAN_ENABLED / HEALTH_SCAN_INTERVAL_SECONDS
- * 控制进程内定时巡检（不再需要外部 cron / supervisord 定时器）。
+ * 与 PHP 版环境变量完全兼容；新增 HEALTH_SCAN_ENABLED / HEALTH_SCAN_HOUR / HEALTH_SCAN_MINUTE /
+ * HEALTH_DEAD_THRESHOLD 控制进程内每日巡检（不再需要外部 cron / supervisord 定时器），
+ * 这些值也可在后台「设置」页修改。
  */
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,7 +23,13 @@ loadEnv(resolve(backendRoot, '.env'), resolve(projectRoot, '.env'))
 const config = loadConfig()
 const app = createApp(config)
 const server = createServer(app, config)
-const cron = startHealthScanCron(app.services.health, config, app.services.logger)
+const cron = startHealthScanCron(
+    app.services.health,
+    config,
+    app.services.logger,
+    app.services.settings,
+    app.services.meta,
+)
 
 server.listen(config.app.port, '0.0.0.0', () => {
     console.log(`devr backend listening on http://0.0.0.0:${config.app.port}`)

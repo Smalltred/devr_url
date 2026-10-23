@@ -18,7 +18,8 @@ const SCHEMA = [
         health_status TEXT NOT NULL DEFAULT 'unknown',
         health_http_code INTEGER,
         health_checked_at TEXT,
-        health_error TEXT
+        health_error TEXT,
+        health_fail_count INTEGER NOT NULL DEFAULT 0
     )`,
     'CREATE TABLE IF NOT EXISTS short_url_counter (id INTEGER NOT NULL)',
     'INSERT INTO short_url_counter (id) SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM short_url_counter)',
@@ -69,6 +70,7 @@ const COLUMN_MIGRATIONS = {
         health_http_code: 'INTEGER',
         health_checked_at: 'TEXT',
         health_error: 'TEXT',
+        health_fail_count: 'INTEGER NOT NULL DEFAULT 0',
     },
 }
 

@@ -56,8 +56,11 @@ export function baseConfig(dbPath, distIndex) {
             connectTimeoutSeconds: 2,
             staleHours: 24,
             batchSize: 20,
-            scanEnabled: false,
-            scanIntervalSeconds: 3600,
+            // 测试不启动定时器（startTestServer 只创建 HTTP 服务），此处仅提供设置默认值
+            scanEnabled: true,
+            scanHour: 12,
+            scanMinute: 0,
+            deadThreshold: 3,
         },
         auth: { username: 'admin', password: 'secret123', passwordHash: '', tokenTtlDays: 7 },
         logging: { path: join(tmpdir(), 'devr-test-logs') },

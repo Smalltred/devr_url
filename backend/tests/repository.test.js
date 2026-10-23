@@ -150,7 +150,11 @@ describe('存量库增量迁移', () => {
 
             const repo = new SqliteUrlRepository(database)
             assert.equal(repo.findByCode('legacy'), 'https://example.com/legacy', '存量数据可读')
-            assert.deepEqual(repo.healthSummary(), { ok: 0, broken: 0, unknown: 1 }, '存量数据默认未检测')
+            assert.deepEqual(
+                repo.healthSummary(),
+                { ok: 0, broken: 0, dead: 0, unknown: 1 },
+                '存量数据默认未检测',
+            )
             assert.equal(repo.nextId(), 8, '计数器从旧值继续')
         } finally {
             database.close()

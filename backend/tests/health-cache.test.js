@@ -3,6 +3,7 @@
  */
 import { after, before, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import { createServer as createHttpServer } from 'node:http'
 import { Database } from '../src/db/database.js'
 import { HttpLinkProbe } from '../src/services/httpLinkProbe.js'
 import { startTestServer } from './helpers.js'
@@ -76,7 +77,7 @@ describe('外链巡检', () => {
         assert.equal(res.json.ok, 1)
         assert.equal(res.json.broken, 2)
         assert.equal(res.json.skipped, 1)
-        assert.deepEqual(res.json.summary, { ok: 1, broken: 2, unknown: 1 })
+        assert.deepEqual(res.json.summary, { ok: 1, broken: 2, dead: 0, unknown: 1 })
 
         const broken = db.get("SELECT health_status, health_http_code FROM short_urls WHERE code = 'bad1'")
         assert.equal(broken.health_status, 'broken')
@@ -94,6 +95,16 @@ describe('外链巡检', () => {
         assert.deepEqual(probe.probed, [])
     })
 
+    it('“无法判定”的条目过了重试窗口会被重新探测', async () => {
+        // 模拟 11 分钟前检测过（超过 10 分钟重试窗口）
+        db.run("UPDATE short_urls SET health_checked_at = datetime('now', '-11 minutes') WHERE health_status = 'unknown'")
+        probe.probed.length = 0
+
+        const res = await server.request('POST', '/api/admin/links/scan', { cookie: token, body: { limit: 10 } })
+        assert.equal(res.json.scanned, 1, '无法判定的条目应可重试')
+        assert.deepEqual(probe.probed, ['https://limited.example.com/'])
+    })
+
     it('按状态筛选与汇总', async () => {
         const broken = await server.request('GET', '/api/admin/links?health=broken', { cookie: token })
         assert.equal(broken.json.total, 2)
@@ -103,20 +114,60 @@ describe('外链巡检', () => {
         )
         assert.equal(broken.json.health.ok, 1)
         assert.equal(broken.json.health.broken, 2)
+        assert.equal(broken.json.health.dead, 0)
         assert.equal(broken.json.health.unknown, 1)
+        assert.equal(broken.json.health.pending, 0, '刚检测过的条目在重试窗口内不重复计入')
 
         const ok = await server.request('GET', '/api/admin/links?health=ok', { cookie: token })
         assert.equal(ok.json.total, 1)
         assert.equal(ok.json.items[0].code, 'ok1')
     })
 
-    it('一键清理只删除失效项，保留正常与无法判定', async () => {
-        const res = await server.request('POST', '/api/admin/links/cleanup-broken', { cookie: token })
+    it('连续失败达到阈值（默认 3 次）才判定为死链', async () => {
+        // 第一次失败已在上面的用例完成（fail_count=1），这里再模拟两次重试
+        for (let attempt = 2; attempt <= 3; attempt += 1) {
+            db.run("UPDATE short_urls SET health_checked_at = datetime('now', '-11 minutes') WHERE health_status = 'broken'")
+            const res = await server.request('POST', '/api/admin/links/scan', { cookie: token, body: { limit: 10 } })
+
+            if (attempt < 3) {
+                assert.equal(res.json.broken, 2, `第 ${attempt} 次失败仍为待确认失效`)
+                assert.equal(
+                    Number(db.get("SELECT health_fail_count AS c FROM short_urls WHERE code = 'bad1'").c),
+                    attempt,
+                )
+            } else {
+                assert.equal(res.json.dead, 2, '第 3 次失败判定为死链')
+                assert.equal(res.json.broken, 0)
+                assert.equal(res.json.summary.dead, 2)
+            }
+        }
+
+        const dead = db.get("SELECT health_status, health_fail_count FROM short_urls WHERE code = 'bad1'")
+        assert.equal(dead.health_status, 'dead')
+        assert.equal(Number(dead.health_fail_count), 3)
+
+        // 死链可按状态筛选
+        const deadList = await server.request('GET', '/api/admin/links?health=dead', { cookie: token })
+        assert.equal(deadList.json.total, 2)
+        assert.deepEqual(
+            deadList.json.items.map((item) => item.code).sort(),
+            ['bad1', 'bad2'],
+        )
+        assert.equal(deadList.json.items[0].health_fail_count, 3)
+
+        // 死链不再进入 10 分钟重试队列（只按 24 小时复检）
+        db.run("UPDATE short_urls SET health_checked_at = datetime('now', '-11 minutes') WHERE health_status = 'dead'")
+        const rescan = await server.request('POST', '/api/admin/links/scan', { cookie: token, body: { limit: 10 } })
+        assert.equal(rescan.json.scanned, 0)
+    })
+
+    it('一键清理只删除死链，保留待确认失效、正常与无法判定', async () => {
+        const res = await server.request('POST', '/api/admin/links/cleanup-dead', { cookie: token })
         assert.equal(res.status, 200)
         assert.equal(res.json.deleted, 2)
-        assert.equal(res.json.health.broken, 0)
+        assert.equal(res.json.health.dead, 0)
 
-        const remaining = db.all('SELECT code, health_status FROM short_urls ORDER BY code')
+        const remaining = db.all('SELECT code FROM short_urls ORDER BY code')
         assert.deepEqual(
             remaining.map((row) => row.code),
             ['ok1', 'skip1'],
@@ -187,6 +238,89 @@ describe('SSRF 防护', () => {
         assert.equal(HttpLinkProbe.classify(429).reachable, null)
         assert.equal(HttpLinkProbe.classify(408).reachable, null)
         assert.equal(HttpLinkProbe.classify(500).reachable, false)
+    })
+})
+
+describe('连接异常判定（本地服务）', () => {
+    /** @type {import('node:http').Server[]} */
+    const servers = []
+    /** @type {HttpLinkProbe} */
+    let probe
+
+    before(async () => {
+        probe = new HttpLinkProbe({ timeoutSeconds: 2, connectTimeoutSeconds: 1, allowPrivateTargets: true })
+    })
+
+    after(async () => {
+        await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))))
+    })
+
+    /**
+     * @param {(req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void} handler
+     */
+    async function start(handler) {
+        const server = createHttpServer(handler)
+        servers.push(server)
+        await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+
+        return `http://127.0.0.1:${server.address().port}/file.png`
+    }
+
+    it('200 判为正常', async () => {
+        const url = await start((req, res) => {
+            res.statusCode = 200
+            res.end('ok')
+        })
+
+        assert.deepEqual(await probe.probe(url), { reachable: true, http_code: 200, error: null })
+    })
+
+    it('404 判为失效', async () => {
+        const url = await start((req, res) => {
+            res.statusCode = 404
+            res.end()
+        })
+
+        assert.deepEqual(await probe.probe(url), { reachable: false, http_code: 404, error: 'HTTP 404' })
+    })
+
+    it('对端重置连接（浏览器 ERR_CONNECTION_CLOSED）判为失效，而不是无法判定', async () => {
+        const url = await start((req) => {
+            req.socket.destroy()
+        })
+
+        const result = await probe.probe(url)
+        assert.equal(result.reachable, false, '连接被终止必须判为失效')
+        assert.match(String(result.error), /连接被终止|网络错误/)
+    })
+
+    it('对端关闭连接且不返回响应，同样判为失效', async () => {
+        const url = await start((req, res) => {
+            res.destroy()
+        })
+
+        const result = await probe.probe(url)
+        assert.equal(result.reachable, false)
+    })
+
+    it('迟迟不响应判为超时失效', async () => {
+        const url = await start(() => {
+            // 故意不响应，由探测器的超时终止
+        })
+
+        const result = await probe.probe(url)
+        assert.equal(result.reachable, false)
+        assert.equal(result.error, '请求超时')
+    })
+
+    it('域名不存在（NXDOMAIN）判为失效；内网地址仍保持无法判定', async () => {
+        const missing = await probe.probe('https://definitely-not-exists-9f3a.invalid/x.png')
+        assert.equal(missing.reachable, false, '域名不存在属于确定性失效')
+        assert.match(String(missing.error), /域名不存在/)
+
+        const unsafe = await HttpLinkProbe.inspectSafety('http://127.0.0.1/')
+        assert.equal(unsafe.permanent, false, '内网地址只是跳过，不能据此删除')
+        assert.equal(await HttpLinkProbe.assertSafeUrl('http://127.0.0.1/'), '目标指向内网或保留地址，已跳过')
     })
 })
 

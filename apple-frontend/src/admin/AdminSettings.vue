@@ -31,6 +31,12 @@ const cacheTtl = ref(300)
 const cacheNegativeTtl = ref(30)
 const cacheStatus = ref(null)
 
+// 定时巡检
+const healthScanEnabled = ref(true)
+// 时间用 <input type="time"> 的 HH:MM 字符串，提交时拆成时/分
+const healthScanTime = ref('12:00')
+const healthDeadThreshold = ref(3)
+
 // 修改密码
 const currentPassword = ref('')
 const newPassword = ref('')
@@ -81,8 +87,31 @@ function applySettings(data) {
     cacheTtl.value = data.cache_ttl ?? 300
     cacheNegativeTtl.value = data.cache_negative_ttl ?? 30
     cacheStatus.value = data.cache || null
+    healthScanEnabled.value = data.health_scan_enabled !== false
+    healthScanTime.value = formatTimeOfDay(data.health_scan_hour ?? 12, data.health_scan_minute ?? 0)
+    healthDeadThreshold.value = data.health_dead_threshold ?? 3
     // 服务端基线：此后与之一致的触发（失焦、重复事件）不再提交
     lastSubmittedPayload = canonicalPayload(data)
+}
+
+/**
+ * 时/分 → HH:MM。
+ */
+function formatTimeOfDay(hour, minute) {
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+}
+
+/**
+ * HH:MM → { hour, minute }；格式非法返回 null。
+ */
+function parseTimeOfDay(value) {
+    const match = /^(\d{1,2}):(\d{2})$/.exec(String(value).trim())
+    if (!match) return null
+    const hour = Number(match[1])
+    const minute = Number(match[2])
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null
+
+    return { hour, minute }
 }
 
 /**
@@ -95,6 +124,10 @@ function canonicalPayload(data) {
         require_login: Boolean(data.require_login),
         cache_ttl: data.cache_ttl ?? 300,
         cache_negative_ttl: data.cache_negative_ttl ?? 30,
+        health_scan_enabled: data.health_scan_enabled !== false,
+        health_scan_hour: data.health_scan_hour ?? 12,
+        health_scan_minute: data.health_scan_minute ?? 0,
+        health_dead_threshold: data.health_dead_threshold ?? 3,
     }
 }
 
@@ -127,8 +160,9 @@ function validateSettings() {
     const rawMinLength = String(codeMinLength.value).trim()
     const rawTtl = String(cacheTtl.value).trim()
     const rawNegativeTtl = String(cacheNegativeTtl.value).trim()
-    // 任一数字框正在改写（空值）时整体跳过
-    if (rawMinLength === '' || rawTtl === '' || rawNegativeTtl === '') {
+    const rawThreshold = String(healthDeadThreshold.value).trim()
+    // 任一数字/时间框正在改写（空值）时整体跳过
+    if (rawMinLength === '' || rawTtl === '' || rawNegativeTtl === '' || rawThreshold === '' || healthScanTime.value === '') {
         return { payload: null, incomplete: true }
     }
 
@@ -159,6 +193,20 @@ function validateSettings() {
         return { payload: null, incomplete: false }
     }
 
+    const threshold = readInt(healthDeadThreshold.value)
+    if (threshold === null || threshold < 1 || threshold > 10) {
+        settingsError.value = '死链判定阈值需为 1-10 的整数'
+
+        return { payload: null, incomplete: false }
+    }
+
+    const scanTime = parseTimeOfDay(healthScanTime.value)
+    if (scanTime === null) {
+        settingsError.value = '巡检时间格式无效'
+
+        return { payload: null, incomplete: false }
+    }
+
     settingsError.value = ''
 
     return {
@@ -168,6 +216,10 @@ function validateSettings() {
             require_login: requireLogin.value,
             cache_ttl: ttl,
             cache_negative_ttl: negativeTtl,
+            health_scan_enabled: healthScanEnabled.value,
+            health_scan_hour: scanTime.hour,
+            health_scan_minute: scanTime.minute,
+            health_dead_threshold: threshold,
         },
         incomplete: false,
     }
@@ -177,7 +229,9 @@ function hasEmptyNumberField() {
     return (
         String(codeMinLength.value).trim() === '' ||
         String(cacheTtl.value).trim() === '' ||
-        String(cacheNegativeTtl.value).trim() === ''
+        String(cacheNegativeTtl.value).trim() === '' ||
+        String(healthDeadThreshold.value).trim() === '' ||
+        healthScanTime.value === ''
     )
 }
 
@@ -258,13 +312,8 @@ async function persistSettings() {
 
 /** 两个设置载荷是否等价（字段一致，数值按数字比较） */
 function isSameSettings(a, b) {
-    return (
-        a.code_min_length === b.code_min_length &&
-        a.code_random === b.code_random &&
-        a.require_login === b.require_login &&
-        a.cache_ttl === b.cache_ttl &&
-        a.cache_negative_ttl === b.cache_negative_ttl
-    )
+    // 逐字段比较易漏（新增设置项时忘记同步）；载荷结构固定、键顺序一致，直接序列化比较
+    return JSON.stringify(a) === JSON.stringify(b)
 }
 
 function flashSaved() {
@@ -547,6 +596,55 @@ function formatTime(value) {
                     {{ savingPassword ? '修改中…' : '修改密码' }}
                 </AppButton>
             </div>
+        </div>
+
+        <!-- 定时巡检 -->
+        <div class="material-regular card mt-4">
+            <div class="mb-1 flex flex-wrap items-center justify-between gap-3">
+                <h2 class="type-lg">定时巡检</h2>
+                <AppSwitch
+                    label="每日定时巡检"
+                    :model-value="healthScanEnabled"
+                    @update:model-value="healthScanEnabled = $event; flushSettingsSave()"
+                />
+            </div>
+            <p class="type-xs text-ink-3">
+                每天在指定时间自动检测短链目标地址是否仍可访问；连续失败达到阈值后判定为「死链」，
+                可在列表页一键清理。时间使用服务器本地时区。
+            </p>
+
+            <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <label class="field-label" for="health-scan-time">每日巡检时间</label>
+                    <input
+                        id="health-scan-time"
+                        v-model="healthScanTime"
+                        type="time"
+                        class="input w-full"
+                        @change="flushSettingsSave"
+                        @blur="flushSettingsSave"
+                    />
+                </div>
+                <div>
+                    <label class="field-label" for="health-dead-threshold">连续失败判定阈值（次）</label>
+                    <input
+                        id="health-dead-threshold"
+                        v-model.number="healthDeadThreshold"
+                        type="number"
+                        min="1"
+                        max="10"
+                        class="input w-full"
+                        @input="scheduleSettingsSave"
+                        @change="flushSettingsSave"
+                        @blur="flushSettingsSave"
+                    />
+                </div>
+            </div>
+
+            <p class="type-xs mt-2 text-ink-3">
+                例如阈值 3：连续 3 次检测都连不上（403/404/5xx/连接被终止/超时）才判定死链；
+                中途恢复会清零计数。关闭定时巡检后仍可在列表页手动扫描。
+            </p>
         </div>
 
         <!-- 开放 API Keys -->

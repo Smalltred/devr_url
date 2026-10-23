@@ -54,6 +54,10 @@ export function createApp(config, overrides = {}) {
     const settings = new SettingsService(settingsStore, {
         cacheTtl: config.cache.ttl,
         cacheNegativeTtl: config.cache.negativeTtl,
+        healthScanEnabled: config.health.scanEnabled,
+        healthScanHour: config.health.scanHour,
+        healthScanMinute: config.health.scanMinute,
+        healthDeadThreshold: config.health.deadThreshold,
     })
     const cache = overrides.cache ?? createStore(config.cache, logger)
     const urls = new CachedUrlRepository(urlStore, cache, settings)
@@ -69,7 +73,7 @@ export function createApp(config, overrides = {}) {
         timeoutSeconds: config.health.timeoutSeconds,
         connectTimeoutSeconds: config.health.connectTimeoutSeconds,
     })
-    const health = new LinkHealthService(urls, probe, logger, config.health.staleHours)
+    const health = new LinkHealthService(urls, probe, logger, config.health.staleHours, settings)
     const admin = new AdminService(urls, clickStore, validator, settings, cache, health)
 
     const csrf = new CsrfGuard(config.security.allowedOrigins, config.security.csrfAllowMissingOrigin)
@@ -168,6 +172,11 @@ export function createApp(config, overrides = {}) {
 
     router.post('/api/admin/links/cleanup-broken', guard(async () => {
         return Response.json(await admin.cleanupBrokenLinks())
+    }))
+
+    // 死链清理：连续失败达到阈值的短链（cleanup-broken 保留为兼容别名）
+    router.post('/api/admin/links/cleanup-dead', guard(async () => {
+        return Response.json(await admin.cleanupDeadLinks())
     }))
 
     router.put('/api/admin/links/{code}', guard(async (request) => {
@@ -339,7 +348,7 @@ export function createApp(config, overrides = {}) {
 
     return {
         handleRequest,
-        services: { settings, auth, admin, health, cache, shortUrls, apiKeys, probe, logger },
+        services: { settings, auth, admin, health, cache, shortUrls, apiKeys, probe, logger, meta: metaStore },
         router,
         close: () => database.close?.(),
     }

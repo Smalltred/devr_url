@@ -61,6 +61,7 @@ const pendingCleanup = ref(false)
 
 const healthFilters = [
     { value: '', label: '全部' },
+    { value: 'dead', label: '死链' },
     { value: 'broken', label: '失效' },
     { value: 'ok', label: '正常' },
     { value: 'unknown', label: '未知' },
@@ -185,12 +186,20 @@ function healthTitle(item) {
             ? `无法判定可用性（内网地址或站点限流），检测于 ${formatTime(item.health_checked_at)}`
             : '尚未检测：点击「扫描外链」开始巡检'
     }
+    if (item.health_status === 'dead') {
+        const reason = item.health_error ? `（${item.health_error}）` : ''
+
+        return `连续 ${item.health_fail_count} 次无法访问${reason}，已判定为死链，可一键清理`
+    }
     const parts = []
     parts.push(
         item.health_status === 'ok'
             ? '目标可正常访问'
             : `目标不可访问${item.health_error ? `（${item.health_error}）` : ''}`,
     )
+    if (item.health_status === 'broken' && item.health_fail_count > 0) {
+        parts.push(`连续失败 ${item.health_fail_count} 次（达到阈值后判定死链）`)
+    }
     if (item.health_checked_at) {
         parts.push(`检测于 ${formatTime(item.health_checked_at)}`)
     }
@@ -204,6 +213,9 @@ function healthTitle(item) {
  */
 function healthLabel(item) {
     if (item.health_status === 'ok') return '正常'
+    if (item.health_status === 'dead') {
+        return item.health_http_code ? `死链 ${item.health_http_code}` : '死链'
+    }
     if (item.health_status === 'broken') {
         return item.health_http_code ? `失效 ${item.health_http_code}` : '失效'
     }
@@ -214,7 +226,7 @@ function healthLabel(item) {
 /** 健康徽标底色：使用设计令牌，避免在模板里堆内联色值 */
 function healthBadgeBackground(status) {
     if (status === 'ok') return 'var(--color-success-soft)'
-    if (status === 'broken') return 'var(--color-danger-soft)'
+    if (status === 'broken' || status === 'dead') return 'var(--color-danger-soft)'
 
     return 'var(--color-bg-elevated)'
 }
@@ -260,15 +272,15 @@ async function scanNow() {
     }
 }
 
-/** 一键清理全部失效短链（含点击记录） */
+/** 一键清理全部死链（连续失败达到阈值，含点击记录） */
 async function confirmCleanupBroken() {
     if (cleaning.value) return
 
     cleaning.value = true
     try {
-        const result = await api.cleanupBrokenLinks()
+        const result = await api.cleanupDeadLinks()
         health.value = result.health || health.value
-        showNotice(`已清理 ${result.deleted} 条失效短链`)
+        showNotice(`已清理 ${result.deleted} 条死链`)
         page.value = 1
         await refresh()
     } catch (err) {
@@ -402,7 +414,10 @@ function showNotice(message) {
                 </div>
 
                 <div v-if="overview" class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
-                    <div class="material-regular card lg:col-span-2">
+                    <!-- 与右侧 Top 10 并排：网格会让两张卡片等高。
+                         这里用纵向 flex + 图表填充模式，让柱状图吃掉剩余高度，
+                         避免图表下方留出一大片空白。卡片内边距保持不变（.card）。 -->
+                    <div class="material-regular card flex flex-col lg:col-span-2">
                         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                             <h2 class="type-base font-semibold">
                                 全站点击趋势
@@ -410,9 +425,17 @@ function showNotice(message) {
                             </h2>
                             <AppPeriodSwitch :model-value="period" @update:model-value="onPeriodChange" />
                         </div>
-                        <!-- 切换粒度时降低不透明度而不是显示骨架：旧图表仍是有效信息 -->
-                        <div :class="periodLoading ? 'opacity-60 transition-opacity' : 'transition-opacity'">
-                            <AppStatBars :series="overview.daily" :period="overview.period || period" />
+                        <!-- 切换粒度时降低不透明度而不是显示骨架：旧图表仍是有效信息。
+                             min-h-0 允许这一层收缩，否则 flex 子项不会小于内容尺寸。 -->
+                        <div
+                            class="min-h-0 flex-1"
+                            :class="periodLoading ? 'opacity-60 transition-opacity' : 'transition-opacity'"
+                        >
+                            <AppStatBars
+                                :series="overview.daily"
+                                :period="overview.period || period"
+                                fill
+                            />
                         </div>
                     </div>
                     <div class="material-regular card">
@@ -446,6 +469,7 @@ function showNotice(message) {
                             外链巡检
                             <span v-if="health" class="text-ink-3">
                                 · 正常 {{ health.ok }} · <span class="text-danger">失效 {{ health.broken }}</span>
+                                · <span class="text-danger">死链 {{ health.dead }}</span>
                                 · 未检测 {{ health.unknown }}
                                 <template v-if="health.last_scan_at">· 最近检测 {{ formatTime(health.last_scan_at) }}</template>
                             </span>
@@ -463,11 +487,11 @@ function showNotice(message) {
                             <AppButton
                                 variant="danger"
                                 size="sm"
-                                :disabled="!health?.broken"
+                                :disabled="!health?.dead"
                                 :loading="cleaning"
                                 @click="pendingCleanup = true"
                             >
-                                {{ cleaning ? '清理中…' : `一键清理失效（${health?.broken || 0}）` }}
+                                {{ cleaning ? '清理中…' : `一键清理死链（${health?.dead || 0}）` }}
                             </AppButton>
                         </div>
                     </div>
@@ -513,7 +537,7 @@ function showNotice(message) {
                             <tbody>
                                 <tr v-if="items.length === 0">
                                     <td colspan="7" class="py-12 text-center text-ink-3">
-                                        {{ loading ? '加载中…' : (healthFilter === 'broken' ? '没有失效短链' : '没有匹配的短链') }}
+                                        {{ loading ? '加载中…' : (healthFilter === 'dead' ? '没有死链' : (healthFilter === 'broken' ? '没有待确认失效的短链' : '没有匹配的短链')) }}
                                     </td>
                                 </tr>
                                 <tr
@@ -622,8 +646,8 @@ function showNotice(message) {
 
         <ConfirmSheet
             v-if="pendingCleanup"
-            title="清理失效短链"
-            :message="`将永久删除全部 ${health?.broken || 0} 条已失效短链及其点击记录，此操作不可恢复。若目标地址只是临时不可用，建议先点「更新链接」改为新地址。`"
+            title="清理死链"
+            :message="`将永久删除全部 ${health?.dead || 0} 条死链（连续 ${health?.dead_threshold || 3} 次检测均无法访问）及其点击记录，此操作不可恢复。若目标地址只是临时不可用，建议先点「更新链接」改为新地址。`"
             confirm-text="确认清理"
             danger
             @confirm="confirmCleanupBroken"

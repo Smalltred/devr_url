@@ -83,9 +83,12 @@ export function loadConfig() {
             connectTimeoutSeconds: envInt('HEALTH_CONNECT_TIMEOUT_SECONDS', 5),
             staleHours: envInt('HEALTH_STALE_HOURS', 24),
             batchSize: envInt('HEALTH_BATCH_SIZE', 20),
-            // 定时巡检：Node 进程内调度，无需外部 cron/supervisord
+            // 每日定时巡检（进程内调度，无需外部 cron）；时刻与阈值可在后台「设置」页覆盖
             scanEnabled: envBool('HEALTH_SCAN_ENABLED', true),
-            scanIntervalSeconds: envInt('HEALTH_SCAN_INTERVAL_SECONDS', 3600),
+            scanHour: envInt('HEALTH_SCAN_HOUR', 12),
+            scanMinute: envInt('HEALTH_SCAN_MINUTE', 0),
+            // 连续失败达到该次数判定为死链
+            deadThreshold: envInt('HEALTH_DEAD_THRESHOLD', 3),
         },
         auth: {
             username: env('ADMIN_USERNAME', 'admin'),

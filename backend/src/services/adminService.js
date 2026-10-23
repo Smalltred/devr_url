@@ -67,6 +67,10 @@ export class AdminService {
                 servers: status.servers,
                 stats,
             },
+            health_scan_enabled: this.settings.healthScanEnabled(),
+            health_scan_hour: this.settings.healthScanHour(),
+            health_scan_minute: this.settings.healthScanMinute(),
+            health_dead_threshold: this.settings.healthDeadThreshold(),
         }
     }
 
@@ -107,6 +111,34 @@ export class AdminService {
                 throw validationError('负缓存有效期需为 0-3600 秒的整数（0 = 不缓存不存在短码）')
             }
             values[SETTINGS_KEYS.cacheNegativeTtl] = String(ttl)
+        }
+
+        if (Object.prototype.hasOwnProperty.call(body, 'health_scan_enabled')) {
+            values[SETTINGS_KEYS.healthScanEnabled] = AdminService.normalizeBool(body.health_scan_enabled) ? '1' : '0'
+        }
+
+        if (Object.prototype.hasOwnProperty.call(body, 'health_scan_hour')) {
+            const hour = strictInt(body.health_scan_hour)
+            if (hour === null || hour < 0 || hour > 23) {
+                throw validationError('巡检小时需为 0-23 的整数')
+            }
+            values[SETTINGS_KEYS.healthScanHour] = String(hour)
+        }
+
+        if (Object.prototype.hasOwnProperty.call(body, 'health_scan_minute')) {
+            const minute = strictInt(body.health_scan_minute)
+            if (minute === null || minute < 0 || minute > 59) {
+                throw validationError('巡检分钟需为 0-59 的整数')
+            }
+            values[SETTINGS_KEYS.healthScanMinute] = String(minute)
+        }
+
+        if (Object.prototype.hasOwnProperty.call(body, 'health_dead_threshold')) {
+            const threshold = strictInt(body.health_dead_threshold)
+            if (threshold === null || threshold < 1 || threshold > 10) {
+                throw validationError('死链判定阈值需为 1-10 的整数')
+            }
+            values[SETTINGS_KEYS.healthDeadThreshold] = String(threshold)
         }
 
         // 合并后的有效组合校验（本次未提交的键取当前已存值）
@@ -162,7 +194,7 @@ export class AdminService {
     links(page, perPage, query, healthStatus = '') {
         const safePage = Math.max(1, Number(page) || 1)
         const safePerPage = Math.min(100, Math.max(1, Number(perPage) || 20))
-        const filter = ['ok', 'broken', 'unknown'].includes(healthStatus) ? healthStatus : ''
+        const filter = ['ok', 'broken', 'dead', 'unknown'].includes(healthStatus) ? healthStatus : ''
 
         const result = this.urls.paginate(safePerPage, (safePage - 1) * safePerPage, query, filter)
         const codes = result.items.map((item) => item.code)
@@ -179,6 +211,7 @@ export class AdminService {
             health_http_code: item.health_http_code,
             health_checked_at: item.health_checked_at,
             health_error: item.health_error,
+            health_fail_count: item.health_fail_count,
         }))
 
         return {
@@ -277,10 +310,16 @@ export class AdminService {
         return await this.health.scanBatch(limit)
     }
 
-    async cleanupBrokenLinks() {
-        const deleted = await this.health.cleanupBroken()
+    /** 一键清理全部死链（连续失败达到阈值的短链） */
+    async cleanupDeadLinks() {
+        const deleted = await this.health.cleanupDead()
 
         return { deleted, health: this.health.overview() }
+    }
+
+    /** 兼容旧接口：清理失效短链（现在只清理已判定为死链的条目） */
+    async cleanupBrokenLinks() {
+        return await this.cleanupDeadLinks()
     }
 
     healthOverview() {

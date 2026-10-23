@@ -27,11 +27,13 @@ function result(reachable, httpCode, error) {
 
 export class HttpLinkProbe {
     /**
-     * @param {{timeoutSeconds?: number, connectTimeoutSeconds?: number}} [options]
+     * @param {{timeoutSeconds?: number, connectTimeoutSeconds?: number, allowPrivateTargets?: boolean}} [options]
+     *   allowPrivateTargets 仅供测试指向本机服务；生产保持 false（SSRF 防护）。
      */
-    constructor({ timeoutSeconds = 8, connectTimeoutSeconds = 5 } = {}) {
+    constructor({ timeoutSeconds = 8, connectTimeoutSeconds = 5, allowPrivateTargets = false } = {}) {
         this.timeoutMs = Math.max(1, timeoutSeconds) * 1000
         this.connectTimeoutMs = Math.max(1, connectTimeoutSeconds) * 1000
+        this.allowPrivateTargets = allowPrivateTargets
     }
 
     /**
@@ -42,12 +44,13 @@ export class HttpLinkProbe {
         let current = url
 
         for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-            const safety = await HttpLinkProbe.assertSafeUrl(current)
-            if (safety !== null) {
-                return result(null, null, safety)
+            const safety = await HttpLinkProbe.inspectSafety(current, this.allowPrivateTargets)
+            if (safety.error !== null) {
+                // 域名不存在属于确定性失效；临时解析故障/内网地址保持“无法判定”，避免误删
+                return result(safety.permanent ? false : null, null, safety.error)
             }
 
-            const response = await this.#request(current, 'HEAD')
+            const response = await this.#requestWithFallback(current, 'HEAD', safety.addresses)
             if (response.error !== null) {
                 return result(false, null, response.error)
             }
@@ -56,7 +59,7 @@ export class HttpLinkProbe {
             let location = response.location
 
             if ([403, 405, 501].includes(code)) {
-                const fallback = await this.#request(current, 'GET')
+                const fallback = await this.#requestWithFallback(current, 'GET', safety.addresses)
                 if (fallback.error !== null) {
                     return result(false, null, fallback.error)
                 }
@@ -77,6 +80,36 @@ export class HttpLinkProbe {
         }
 
         return result(null, null, '跳转次数过多，已停止检测')
+    }
+
+    /**
+     * 按解析出的地址逐个尝试（IPv4 优先），避免双栈主机只测通一个协议族时被误判：
+     * - 连接级失败（拒绝/重置/不可达）换下一个地址再试；
+     * - 超时不再重试（避免双倍等待），直接判失效。
+     *
+     * @param {string} rawUrl
+     * @param {'HEAD'|'GET'} method
+     * @param {Array<{address: string, family: number}>} addresses
+     */
+    async #requestWithFallback(rawUrl, method, addresses) {
+        const attempts = addresses.slice(0, 2)
+        let last = null
+
+        for (let index = 0; index < attempts.length; index += 1) {
+            const startedAt = Date.now()
+            const response = await this.#request(rawUrl, method, attempts[index])
+            if (response.error === null) {
+                return response
+            }
+            last = response
+
+            const timedOut = Date.now() - startedAt >= this.timeoutMs
+            if (timedOut || !HttpLinkProbe.isRetryableError(response.errorCode)) {
+                break
+            }
+        }
+
+        return last ?? { http_code: 0, location: null, error: '域名解析失败', errorCode: 'ENOTFOUND' }
     }
 
     /**
@@ -137,27 +170,33 @@ export class HttpLinkProbe {
     }
 
     /**
-     * SSRF 防护：仅 http/https，解析出的所有 IP 必须为公网地址。
+     * SSRF 防护 + 解析结果：仅 http/https，解析出的所有 IP 必须为公网地址。
+     *
+     * permanent=true 表示“确定性失效”（域名不存在），调用方应判为失效；
+     * permanent=false 表示无法安全/稳定判定（临时解析故障、内网地址），保持“无法判定”。
      *
      * @param {string} rawUrl
-     * @returns {Promise<string|null>} null 表示通过，否则为拒绝原因
+     * @param {boolean} [allowPrivate] 仅测试使用
+     * @returns {Promise<{error: string|null, permanent: boolean, addresses: Array<{address: string, family: number}>}>}
      */
-    static async assertSafeUrl(rawUrl) {
+    static async inspectSafety(rawUrl, allowPrivate = false) {
+        const fail = (error, permanent = false) => ({ error, permanent, addresses: [] })
+
         let parsed
         try {
             parsed = new URL(rawUrl)
         } catch {
-            return '目标地址格式无效'
+            return fail('目标地址格式无效')
         }
 
         const scheme = parsed.protocol.toLowerCase()
         if (scheme !== 'http:' && scheme !== 'https:') {
-            return '仅支持 http/https 地址'
+            return fail('仅支持 http/https 地址')
         }
 
         const host = parsed.hostname.replace(/^\[|\]$/g, '')
         if (host === '') {
-            return '目标地址缺少主机名'
+            return fail('目标地址缺少主机名')
         }
 
         let addresses
@@ -165,23 +204,50 @@ export class HttpLinkProbe {
             addresses = [{ address: host, family: isIP(host) }]
         } else {
             try {
-                addresses = await dnsLookup(host, { all: true, verbatim: true })
-            } catch {
-                return '域名解析失败'
+                // verbatim:false → IPv4 优先，减少“首个地址是 IPv6 但不可达”造成的误判
+                addresses = await dnsLookup(host, { all: true, verbatim: false })
+            } catch (error) {
+                // ENOTFOUND = 域名不存在（确定性失效）；EAI_AGAIN/SERVFAIL 等属临时故障
+                if (error && error.code === 'ENOTFOUND') {
+                    return fail('域名不存在（DNS 解析失败）', true)
+                }
+
+                return fail('域名解析暂时失败，本次跳过')
             }
         }
 
         if (!addresses || addresses.length === 0) {
-            return '域名解析失败'
+            return fail('域名不存在（DNS 解析失败）', true)
         }
 
-        for (const entry of addresses) {
-            if (HttpLinkProbe.isPrivateOrReserved(entry.address)) {
-                return '目标指向内网或保留地址，已跳过'
+        if (!allowPrivate) {
+            for (const entry of addresses) {
+                if (HttpLinkProbe.isPrivateOrReserved(entry.address)) {
+                    return fail('目标指向内网或保留地址，已跳过')
+                }
             }
         }
 
-        return null
+        return { error: null, permanent: false, addresses }
+    }
+
+    /**
+     * 兼容旧调用：只返回拒绝原因字符串。
+     *
+     * @param {string} rawUrl
+     * @returns {Promise<string|null>}
+     */
+    static async assertSafeUrl(rawUrl) {
+        return (await HttpLinkProbe.inspectSafety(rawUrl)).error
+    }
+
+    /**
+     * 连接级错误可以换下一个解析地址重试。
+     *
+     * @param {string} code
+     */
+    static isRetryableError(code) {
+        return ['ECONNREFUSED', 'ECONNRESET', 'ENETUNREACH', 'EHOSTUNREACH', 'EAI_AGAIN', 'EPIPE'].includes(code)
     }
 
     /**
@@ -245,27 +311,18 @@ export class HttpLinkProbe {
      *
      * @param {string} rawUrl
      * @param {'HEAD'|'GET'} method
-     * @returns {Promise<{http_code: number, location: string|null, error: string|null}>}
+     * @param {{address: string, family: number}} pinned 已校验的解析结果（固定连接目标，防 DNS 重绑定）
+     * @returns {Promise<{http_code: number, location: string|null, error: string|null, errorCode: string|null}>}
      */
-    async #request(rawUrl, method) {
+    async #request(rawUrl, method, pinned) {
         let parsed
         try {
             parsed = new URL(rawUrl)
         } catch {
-            return { http_code: 0, location: null, error: '目标地址格式无效' }
+            return { http_code: 0, location: null, error: '目标地址格式无效', errorCode: null }
         }
 
         const host = parsed.hostname.replace(/^\[|\]$/g, '')
-        // 复用已校验的解析结果并固定到本次连接，防止 DNS 重绑定
-        let pinned
-        try {
-            const entries = isIP(host) !== 0
-                ? [{ address: host, family: isIP(host) }]
-                : await dnsLookup(host, { all: true, verbatim: true })
-            pinned = entries[0]
-        } catch {
-            return { http_code: 0, location: null, error: '域名解析失败' }
-        }
 
         const headers = {
             'user-agent': USER_AGENT,
@@ -327,16 +384,32 @@ export class HttpLinkProbe {
                 const code = Number(response.statusCode ?? 0)
                 const location = response.headers.location ?? null
                 response.destroy()
-                finish({ http_code: code, location, error: null })
+                finish({ http_code: code, location, error: null, errorCode: null })
             })
 
             request.on('error', (error) => {
                 clearTimeout(totalTimer)
-                finish({ http_code: 0, location: null, error: HttpLinkProbe.humanizeError(error) })
+                finish({
+                    http_code: 0,
+                    location: null,
+                    error: HttpLinkProbe.humanizeError(error),
+                    errorCode: String(error?.code ?? '') || null,
+                })
             })
 
             request.on('timeout', () => {
                 request.destroy(new Error('ETIMEDOUT'))
+            })
+
+            // 兜底：连接被对端关闭且未触发 error/response 时，也必须结束等待
+            request.on('close', () => {
+                clearTimeout(totalTimer)
+                finish({
+                    http_code: 0,
+                    location: null,
+                    error: '连接被终止（目标未返回响应）',
+                    errorCode: 'ECONNRESET',
+                })
             })
 
             request.end()
@@ -356,11 +429,18 @@ export class HttpLinkProbe {
         if (lower.includes('etimedout') || lower.includes('timed out') || lower.includes('timeout')) {
             return '请求超时'
         }
+        // 连接被对端关闭（浏览器表现为 ERR_CONNECTION_CLOSED）属于确定性失效
+        if (lower.includes('econnreset') || lower.includes('socket hang up') || lower.includes('econnclosed')) {
+            return '连接被终止（目标主动断开）'
+        }
         if (lower.includes('enotfound') || lower.includes('eai_again') || lower.includes('getaddrinfo')) {
             return '域名解析失败'
         }
         if (lower.includes('econnrefused')) {
             return '连接被拒绝'
+        }
+        if (lower.includes('enetunreach') || lower.includes('ehostunreach')) {
+            return '网络不可达'
         }
         if (lower.includes('certificate') || lower.includes('ssl') || lower.includes('tls')) {
             return 'SSL/证书校验失败'

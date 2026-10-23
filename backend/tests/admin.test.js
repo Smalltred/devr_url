@@ -219,6 +219,11 @@ describe('管理后台 · 基础', () => {
         assert.equal(view.json.cache_ttl, 300)
         assert.equal(view.json.password_source, 'env')
         assert.equal(view.json.cache.driver, 'null')
+        // 每日巡检默认 12:00、连续 3 次失败判定死链
+        assert.equal(view.json.health_scan_enabled, true)
+        assert.equal(view.json.health_scan_hour, 12)
+        assert.equal(view.json.health_scan_minute, 0)
+        assert.equal(view.json.health_dead_threshold, 3)
 
         const badLength = await server.request('PUT', '/api/admin/settings', { cookie: token, body: { code_min_length: 20 } })
         assert.equal(badLength.status, 400)
@@ -229,13 +234,31 @@ describe('管理后台 · 基础', () => {
         const randomTooShort = await server.request('PUT', '/api/admin/settings', { cookie: token, body: { code_random: true } })
         assert.equal(randomTooShort.status, 400)
 
+        // 巡检配置校验
+        assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { health_scan_hour: 24 } })).status, 400)
+        assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { health_scan_minute: 60 } })).status, 400)
+        assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { health_dead_threshold: 0 } })).status, 400)
+        assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { health_dead_threshold: 11 } })).status, 400)
+
         const saved = await server.request('PUT', '/api/admin/settings', {
             cookie: token,
-            body: { code_min_length: 4, code_random: false, require_login: false, cache_ttl: 600 },
+            body: {
+                code_min_length: 4,
+                code_random: false,
+                require_login: false,
+                cache_ttl: 600,
+                health_scan_enabled: true,
+                health_scan_hour: 9,
+                health_scan_minute: 30,
+                health_dead_threshold: 5,
+            },
         })
         assert.equal(saved.status, 200)
         assert.equal(saved.json.code_min_length, 4)
         assert.equal(saved.json.cache_ttl, 600)
+        assert.equal(saved.json.health_scan_hour, 9)
+        assert.equal(saved.json.health_scan_minute, 30)
+        assert.equal(saved.json.health_dead_threshold, 5)
 
         // 长度补齐生效
         const created = await server.request('POST', '/url', { body: { url: 'https://example.com/padded' } })

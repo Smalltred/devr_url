@@ -10,6 +10,8 @@ const DEFAULT_BATCH = 20
 const MAX_BATCH = 100
 const DEFAULT_STALE_HOURS = 24
 const DEFAULT_TIME_BUDGET = 20
+/** “无法判定”条目的重试窗口：过了这个时间允许再次探测，避免旧状态长期停留 */
+const UNKNOWN_RETRY_SECONDS = 600
 
 export class LinkHealthService {
     /**
@@ -17,12 +19,14 @@ export class LinkHealthService {
      * @param {{probe: (url: string) => Promise<{reachable: boolean|null, http_code: number|null, error: string|null}>}} probe
      * @param {import('../support/logger.js').Logger} logger
      * @param {number} [staleHours]
+     * @param {{healthDeadThreshold: () => number}} [settings] 提供死链判定阈值
      */
-    constructor(urls, probe, logger, staleHours = DEFAULT_STALE_HOURS) {
+    constructor(urls, probe, logger, staleHours = DEFAULT_STALE_HOURS, settings = { healthDeadThreshold: () => 3 }) {
         this.urls = urls
         this.probe = probe
         this.logger = logger
         this.staleHours = staleHours
+        this.settings = settings
     }
 
     /**
@@ -32,11 +36,14 @@ export class LinkHealthService {
     async scanBatch(limit = DEFAULT_BATCH, timeBudgetSeconds = DEFAULT_TIME_BUDGET) {
         const cappedLimit = Math.max(1, Math.min(Number(limit) || DEFAULT_BATCH, MAX_BATCH))
         const budget = Math.max(1, Number(timeBudgetSeconds) || DEFAULT_TIME_BUDGET)
+        const threshold = Math.max(1, Number(this.settings.healthDeadThreshold()) || 3)
         const staleBefore = this.#staleBefore()
-        const targets = this.urls.findPendingHealthCheck(cappedLimit, staleBefore)
+        const unknownBefore = this.#unknownBefore()
+        const targets = this.urls.findPendingHealthCheck(cappedLimit, staleBefore, unknownBefore)
 
         let ok = 0
         let broken = 0
+        let dead = 0
         let skipped = 0
         let scanned = 0
         const deadline = Date.now() + budget * 1000
@@ -57,21 +64,35 @@ export class LinkHealthService {
             }
 
             if (outcome.reachable) {
-                this.urls.saveHealthCheck(target.code, 'ok', outcome.http_code, null)
+                // 恢复正常：清零连续失败计数
+                this.urls.saveHealthCheck(target.code, 'ok', outcome.http_code, null, 0)
                 ok += 1
                 continue
             }
 
-            this.urls.saveHealthCheck(target.code, 'broken', outcome.http_code, outcome.error)
-            broken += 1
+            const failCount = Number(target.health_fail_count ?? 0) + 1
+            const isDead = failCount >= threshold
+            this.urls.saveHealthCheck(
+                target.code,
+                isDead ? 'dead' : 'broken',
+                outcome.http_code,
+                outcome.error,
+                failCount,
+            )
+            if (isDead) {
+                dead += 1
+            } else {
+                broken += 1
+            }
         }
 
         return {
             scanned,
             ok,
             broken,
+            dead,
             skipped,
-            remaining: this.urls.countPendingHealthCheck(staleBefore),
+            remaining: this.urls.countPendingHealthCheck(staleBefore, unknownBefore),
             summary: this.urls.healthSummary(),
         }
     }
@@ -83,7 +104,7 @@ export class LinkHealthService {
      * @param {number} budgetSeconds
      */
     async scanAll(batchSize = DEFAULT_BATCH, budgetSeconds = 600) {
-        const totals = { scanned: 0, ok: 0, broken: 0, skipped: 0, batches: 0 }
+        const totals = { scanned: 0, ok: 0, broken: 0, dead: 0, skipped: 0, batches: 0 }
         const deadline = Date.now() + Math.max(1, budgetSeconds) * 1000
 
         while (Date.now() < deadline) {
@@ -92,6 +113,7 @@ export class LinkHealthService {
             totals.scanned += result.scanned
             totals.ok += result.ok
             totals.broken += result.broken
+            totals.dead += result.dead
             totals.skipped += result.skipped
 
             if (result.scanned === 0 || (result.remaining === 0 && result.skipped === 0)) {
@@ -107,14 +129,19 @@ export class LinkHealthService {
         return totals
     }
 
-    /** 删除全部失效短链（含点击记录），返回删除数量 */
-    async cleanupBroken() {
-        const deleted = await this.urls.deleteByHealthStatus('broken')
+    /** 删除全部死链（连续失败达到阈值的短链，含点击记录） */
+    async cleanupDead() {
+        const deleted = await this.urls.deleteByHealthStatus('dead')
         if (deleted > 0) {
-            this.logger.info('broken links cleaned up', { deleted })
+            this.logger.info('dead links cleaned up', { deleted })
         }
 
         return deleted
+    }
+
+    /** 兼容旧调用 */
+    async cleanupBroken() {
+        return await this.cleanupDead()
     }
 
     /**
@@ -127,13 +154,19 @@ export class LinkHealthService {
         return {
             ok: summary.ok,
             broken: summary.broken,
+            dead: summary.dead,
             unknown: summary.unknown,
-            pending: this.urls.countPendingHealthCheck(this.#staleBefore()),
+            pending: this.urls.countPendingHealthCheck(this.#staleBefore(), this.#unknownBefore()),
             last_scan_at: scanInfo.last_scan_at,
+            dead_threshold: Math.max(1, Number(this.settings.healthDeadThreshold()) || 3),
         }
     }
 
     #staleBefore() {
         return utcDateTime(Date.now() - Math.max(1, this.staleHours) * 3600 * 1000)
+    }
+
+    #unknownBefore() {
+        return utcDateTime(Date.now() - UNKNOWN_RETRY_SECONDS * 1000)
     }
 }

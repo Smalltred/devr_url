@@ -74,7 +74,7 @@ export class SqliteUrlRepository {
             conditions.push("(code LIKE ? ESCAPE '\\' OR url LIKE ? ESCAPE '\\')")
             params.push(like, like)
         }
-        if (['ok', 'broken', 'unknown'].includes(healthStatus)) {
+        if (['ok', 'broken', 'dead', 'unknown'].includes(healthStatus)) {
             conditions.push('health_status = ?')
             params.push(healthStatus)
         }
@@ -83,7 +83,7 @@ export class SqliteUrlRepository {
 
         const totalRow = this.database.get(`SELECT COUNT(*) AS total FROM short_urls ${where}`, ...params)
         const rows = this.database.all(
-            `SELECT code, url, created_at, health_status, health_http_code, health_checked_at, health_error
+            `SELECT code, url, created_at, health_status, health_http_code, health_checked_at, health_error, health_fail_count
              FROM short_urls ${where}
              ORDER BY created_at DESC, rowid DESC
              LIMIT ? OFFSET ?`,
@@ -102,6 +102,7 @@ export class SqliteUrlRepository {
                 : Number(row.health_http_code),
             health_checked_at: typeof row.health_checked_at === 'string' ? row.health_checked_at : null,
             health_error: typeof row.health_error === 'string' ? row.health_error : null,
+            health_fail_count: Number(row.health_fail_count ?? 0),
         }))
 
         return { items, total: Number(totalRow?.total ?? 0) }
@@ -127,13 +128,26 @@ export class SqliteUrlRepository {
         })
     }
 
-    findPendingHealthCheck(limit, staleBefore) {
+    /**
+     * 待检队列：
+     * - 从未检测或超过复检窗口的；
+     * - “无法判定”和“尚未达到死链阈值的失效”按短重试窗口再次探测（累计失败次数）；
+     * - 已判定为死链的只按正常复检窗口重试（保留计数，避免频繁骚扰对方站点）。
+     *
+     * @param {number} limit
+     * @param {string} staleBefore 正常复检窗口起点
+     * @param {string} [unknownBefore] 未知/待确认失效的重试窗口起点
+     */
+    findPendingHealthCheck(limit, staleBefore, unknownBefore = staleBefore) {
         const rows = this.database.all(
-            `SELECT code, url, health_status FROM short_urls
-             WHERE health_checked_at IS NULL OR health_checked_at < ?
+            `SELECT code, url, health_status, health_fail_count FROM short_urls
+             WHERE health_checked_at IS NULL
+                OR health_checked_at < ?
+                OR (health_status IN ('unknown', 'broken') AND health_checked_at < ?)
              ORDER BY health_checked_at IS NOT NULL, health_checked_at ASC, rowid ASC
              LIMIT ?`,
             staleBefore,
+            unknownBefore,
             limit,
         )
 
@@ -141,26 +155,44 @@ export class SqliteUrlRepository {
             code: String(row.code),
             url: String(row.url),
             health_status: String(row.health_status ?? 'unknown'),
+            health_fail_count: Number(row.health_fail_count ?? 0),
         }))
     }
 
-    countPendingHealthCheck(staleBefore) {
+    /**
+     * @param {string} staleBefore
+     * @param {string} [unknownBefore]
+     */
+    countPendingHealthCheck(staleBefore, unknownBefore = staleBefore) {
         const row = this.database.get(
-            'SELECT COUNT(*) AS total FROM short_urls WHERE health_checked_at IS NULL OR health_checked_at < ?',
+            `SELECT COUNT(*) AS total FROM short_urls
+             WHERE health_checked_at IS NULL
+                OR health_checked_at < ?
+                OR (health_status IN ('unknown', 'broken') AND health_checked_at < ?)`,
             staleBefore,
+            unknownBefore,
         )
 
         return Number(row?.total ?? 0)
     }
 
-    saveHealthCheck(code, status, httpCode, error) {
+    /**
+     * @param {string} code
+     * @param {'ok'|'broken'|'dead'|'unknown'} status
+     * @param {number|null} httpCode
+     * @param {string|null} error
+     * @param {number} failCount 连续失败次数
+     */
+    saveHealthCheck(code, status, httpCode, error, failCount = 0) {
         this.database.run(
             `UPDATE short_urls
-             SET health_status = ?, health_http_code = ?, health_checked_at = datetime('now'), health_error = ?
+             SET health_status = ?, health_http_code = ?, health_checked_at = datetime('now'),
+                 health_error = ?, health_fail_count = ?
              WHERE code = ?`,
             status,
             httpCode,
             error,
+            failCount,
             code,
         )
     }
@@ -171,7 +203,7 @@ export class SqliteUrlRepository {
 
     healthSummary() {
         const rows = this.database.all('SELECT health_status, COUNT(*) AS total FROM short_urls GROUP BY health_status')
-        const summary = { ok: 0, broken: 0, unknown: 0 }
+        const summary = { ok: 0, broken: 0, dead: 0, unknown: 0 }
         for (const row of rows) {
             const key = String(row.health_status)
             if (key in summary) {

@@ -83,17 +83,17 @@ export class CachedUrlRepository {
         await this.#safe(() => this.cache.delete(KEY_PREFIX + code), false)
     }
 
-    findPendingHealthCheck(limit, staleBefore) {
-        return this.inner.findPendingHealthCheck(limit, staleBefore)
+    findPendingHealthCheck(limit, staleBefore, unknownBefore = staleBefore) {
+        return this.inner.findPendingHealthCheck(limit, staleBefore, unknownBefore)
     }
 
-    countPendingHealthCheck(staleBefore) {
-        return this.inner.countPendingHealthCheck(staleBefore)
+    countPendingHealthCheck(staleBefore, unknownBefore = staleBefore) {
+        return this.inner.countPendingHealthCheck(staleBefore, unknownBefore)
     }
 
     // 巡检结果不影响短码→URL 映射，无需动缓存
-    saveHealthCheck(code, status, httpCode, error) {
-        this.inner.saveHealthCheck(code, status, httpCode, error)
+    saveHealthCheck(code, status, httpCode, error, failCount = 0) {
+        this.inner.saveHealthCheck(code, status, httpCode, error, failCount)
     }
 
     touchHealthCheck(code) {
