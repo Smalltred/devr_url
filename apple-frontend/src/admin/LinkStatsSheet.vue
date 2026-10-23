@@ -77,7 +77,7 @@ function deviceRatio(value) {
             :href="stats.url"
             target="_blank"
             rel="noopener"
-            class="type-sm -mt-2 mb-4 block break-all text-ink-3 hover:text-accent"
+            class="type-sm -mt-2 mb-4 block w-full max-w-full break-all whitespace-normal text-ink-3 [overflow-wrap:anywhere] hover:text-accent"
             :title="stats.url"
         >{{ stats.url }}</a>
         <div v-else-if="loading" class="skeleton-bar type-sm -mt-2 mb-4" style="width: 70%">&nbsp;</div>
