@@ -67,6 +67,22 @@ describe('SQLite 仓储', () => {
         assert.deepEqual(clicks.totalByCodes(['xyz']), { xyz: 2 })
     })
 
+    it('来源统计把无 Referer 的点击归入直接访问', () => {
+        clicks.record('direct', { referer: null, referer_host: null, device: 'mobile', ip_hash: null })
+        clicks.record('direct', { referer: null, referer_host: '', device: 'desktop', ip_hash: null })
+        clicks.record('direct', {
+            referer: 'https://google.com/search',
+            referer_host: 'google.com',
+            device: 'desktop',
+            ip_hash: null,
+        })
+
+        assert.deepEqual(clicks.topRefererHosts('direct', 10), [
+            { referer_host: null, clicks: 2 },
+            { referer_host: 'google.com', clicks: 1 },
+        ])
+    })
+
     it('保存创建者信息并在改码后保留', () => {
         repo.save('meta', 'https://example.com/meta', {
             type: 'api_key',

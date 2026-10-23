@@ -40,16 +40,21 @@ function hostOf(referer) {
 }
 
 /**
- * 设备判定：UA 为空记 unknown，含 mobile 记 mobile，其余 desktop。
+ * 设备判定：优先使用浏览器客户端提示（Sec-CH-UA-Mobile），
+ * 其次按 UA 判断；iPad / Android 平板同样计入移动端。
  *
  * @param {string} userAgent
+ * @param {string} mobileHint `?1` 表示移动端（Chromium 系浏览器会发送）
  */
-function deviceOf(userAgent) {
+function deviceOf(userAgent, mobileHint) {
+    if (mobileHint === '?1') {
+        return 'mobile'
+    }
     if (!userAgent) {
         return 'unknown'
     }
 
-    return userAgent.toLowerCase().includes('mobile') ? 'mobile' : 'desktop'
+    return /mobile|ipad|tablet/.test(userAgent.toLowerCase()) ? 'mobile' : 'desktop'
 }
 
 export class ClickTracker {
@@ -69,13 +74,16 @@ export class ClickTracker {
      * @param {string} code
      */
     track(request, code) {
-        const refererHeader = request.header('referer') ?? null
+        // 聊天软件（微信/QQ）打开链接时常不发送 Referer；此时退回 Origin，
+        // 仍拿不到就记为 null —— 统计页会把它归入「直接访问」。
+        const refererHeader = request.header('referer') ?? request.header('origin') ?? null
         const userAgent = request.header('user-agent') ?? ''
+        const mobileHint = request.header('sec-ch-ua-mobile') ?? ''
 
         this.clicks.record(code, {
             referer: this.storeFullReferer ? truncate(refererHeader, MAX_REFERER_LENGTH) : null,
             referer_host: truncate(hostOf(refererHeader), MAX_REFERER_HOST_LENGTH),
-            device: deviceOf(userAgent),
+            device: deviceOf(userAgent, mobileHint),
             ip_hash: this.ipHasher.hash(request.clientIp),
         })
     }

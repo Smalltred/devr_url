@@ -103,9 +103,9 @@ function deviceRatio(value) {
             <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
                     <div class="skeleton-bar type-sm mb-3 font-semibold" style="width: 7rem">&nbsp;</div>
-                    <!-- 与 .referer-box 同高，保证加载态/内容态面板尺寸一致 -->
+                    <!-- 与空来源区同高（min-height），高度不随条数变化 -->
                     <div class="referer-box">
-                        <div class="skeleton-bar" style="height: 100%" />
+                        <div class="skeleton-bar" style="height: 2.75rem" />
                     </div>
                 </div>
                 <div>
@@ -155,19 +155,20 @@ function deviceRatio(value) {
             <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
                 <div>
                     <h3 class="type-sm mb-3 font-semibold">来源域名 Top 10</h3>
-                    <!-- 固定高度并内部滚动：来源条数随数据变化（0–10 条），
-                         若让它撑开内容，弹窗高度就会随数据量变化，
-                         居中布局下表现为上下同时位移。锁死高度后，
-                         面板尺寸与数据无关，从结构上消除这类抖动。 -->
+                    <!-- 高度随数据自适应（空态只占一行），超过 8.5rem 后内部滚动：
+                         既避免长列表把弹窗撑高，也不让 0–1 条数据时留出一大片空白。 -->
                     <div class="referer-box">
                         <p v-if="stats.referers.length === 0" class="type-sm text-ink-3">暂无来源记录</p>
                         <ul v-else class="type-sm space-y-2">
                             <li
                                 v-for="ref in stats.referers"
-                                :key="ref.referer_host"
+                                :key="ref.referer_host || 'direct'"
                                 class="flex justify-between gap-2 border-b border-line pb-1"
                             >
-                                <span class="truncate text-ink-2">{{ ref.referer_host }}</span>
+                                <span
+                                    class="truncate"
+                                    :class="ref.referer_host ? 'text-ink-2' : 'text-ink-3'"
+                                >{{ ref.referer_host || '直接访问' }}</span>
                                 <span class="tnum shrink-0 font-semibold">{{ ref.clicks }}</span>
                             </li>
                         </ul>
@@ -261,13 +262,12 @@ function deviceRatio(value) {
     height: 3.1875rem; /* 2×2.5rem + 12px，与真实块（51px）等高 */
 }
 
-/* 来源域名区固定高度并内部滚动。
-   来源条数随数据变化（0–10 条，高度差可达数百像素），
-   若让它参与内容高度计算，弹窗尺寸就会随数据变化 ——
-   居中布局下表现为上下同时位移（"数据加载后弹窗跳一下"）。
-   锁死高度后，面板尺寸与数据完全无关。 */
+/* 来源列表：空态只保留一行高度，最多 8.5rem 后内部滚动。
+   固定 8.5rem 会在 0–1 条来源时留下近 100px 空白，
+   把下方的「创建信息」顶出弹窗可视区，用户必须滚动才能看到。 */
 .referer-box {
-    height: 8.5rem;
+    min-height: 2.75rem;
+    max-height: 8.5rem;
     overflow-y: auto;
     overscroll-behavior: contain;
 }

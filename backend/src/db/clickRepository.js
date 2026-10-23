@@ -115,16 +115,28 @@ export class SqliteClickRepository {
         )
     }
 
+    /**
+     * 来源 Top N。
+     *
+     * 没有 Referer 的点击（聊天软件直接打开、地址栏输入等）归入
+     * `referer_host: null`，由前端显示为「直接访问」——
+     * 否则「有大量点击但来源区一片空白」会让人误以为统计没生效。
+     */
     topRefererHosts(code, limit) {
         const rows = this.database.all(
-            `SELECT referer_host, COUNT(*) AS clicks FROM short_url_clicks
-             WHERE code = ? AND referer_host IS NOT NULL AND referer_host != ''
-             GROUP BY referer_host ORDER BY clicks DESC, referer_host ASC LIMIT ?`,
+            `SELECT COALESCE(NULLIF(referer_host, ''), '') AS referer_host, COUNT(*) AS clicks
+             FROM short_url_clicks
+             WHERE code = ?
+             GROUP BY COALESCE(NULLIF(referer_host, ''), '')
+             ORDER BY clicks DESC, referer_host ASC LIMIT ?`,
             code,
             limit,
         )
 
-        return rows.map((row) => ({ referer_host: String(row.referer_host), clicks: Number(row.clicks) }))
+        return rows.map((row) => ({
+            referer_host: row.referer_host === '' ? null : String(row.referer_host),
+            clicks: Number(row.clicks),
+        }))
     }
 
     deviceSplit(code) {
