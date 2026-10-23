@@ -2,8 +2,8 @@
 
 > **历史文档**：本文是重构前的原版分析记录（github.com/onee-io/short-url @ commit 7a1352f），
 > 文中"React / Redis / server.js"等描述均为**历史状态**，仅作决策依据留存。
-> 当前版本已完成全部迁移（PHP 8.2 + SQLite + Vue 3 + 管理后台），现状见
-> [README](../README.md) 与 [MIGRATION.md](MIGRATION.md)；方案中"Redis 兼容"相关条款
+> 后续演进：先迁至 PHP 8.2，现已重写为 **Node.js 24 + 内置 SQLite**（前端 Vue 3 + Vite），
+> 现状见 [README](../README.md) 与 [MIGRATION.md](MIGRATION.md)；方案中"Redis 兼容"相关条款
 > 已被 [SQLITE_MIGRATION.md](SQLITE_MIGRATION.md) 取代。
 
 > 分析对象：github.com/onee-io/short-url @ master（commit 7a1352f）

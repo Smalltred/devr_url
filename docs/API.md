@@ -71,7 +71,19 @@ HTTP/1.1 404 Not Found
 }
 ```
 
-- 静态资源（`/`、`/favicon.ico`、`/assets/*` 等）由 Nginx 直接返回 Vue 页面，不进入 PHP。
+- 静态资源（`/`、`/favicon.ico`、`/assets/*` 等）由 Nginx 直接返回 Vue 页面，不进入 Node 进程。
+
+## 健康检查
+
+```http
+GET /healthz
+```
+
+```json
+{"ok": true, "links": 12}
+```
+
+触发一次数据库查询确认存储可用，供容器/负载均衡/宝塔探活使用（无鉴权、不写数据）。
 
 ## 状态码约定
 
@@ -222,6 +234,56 @@ GET /api/admin/links?page=1&per_page=20&q=关键词
 ```
 
 `created_at` 为 UTC 时间。
+
+列表项还包含外链健康状态：
+
+```json
+{
+    "health_status": "broken",
+    "health_http_code": 404,
+    "health_checked_at": "2026-10-23 02:46:00",
+    "health_error": "HTTP 404"
+}
+```
+
+- `health_status`：`ok` 正常 / `broken` 失效 / `unknown` 未检测或无法判定；
+- 响应另含 `health` 汇总：`{"ok": 2, "broken": 3, "unknown": 1, "pending": 0, "last_scan_at": "..."}`。
+
+支持按状态过滤：`GET /api/admin/links?health=broken`（可选 `ok` / `unknown`）。
+
+### 扫描外链（分批）
+
+```http
+POST /api/admin/links/scan
+Content-Type: application/json
+
+{"limit": 20}
+```
+
+检测一批待检短链（`limit` 上限 100，默认 20）。返回：
+
+```json
+{
+    "scanned": 20, "ok": 15, "broken": 4, "skipped": 1,
+    "remaining": 8,
+    "summary": {"ok": 120, "broken": 4, "unknown": 3}
+}
+```
+
+`skipped` 为无法判定的条目（限流/内网地址/瞬时故障），不覆盖原状态；
+`remaining` 为仍在复检间隔外、待下一批检测的数量。
+
+### 一键清理失效短链
+
+```http
+POST /api/admin/links/cleanup-broken
+```
+
+删除全部 `health_status=broken` 的短链及其点击记录，成功返回：
+
+```json
+{"deleted": 4, "health": {"ok": 120, "broken": 0, "unknown": 3, "pending": 0, "last_scan_at": "..."}}
+```
 
 ### 编辑短链
 
