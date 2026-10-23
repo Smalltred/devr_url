@@ -466,8 +466,10 @@ function showNotice(message) {
 
                 <!-- 数据密集区用不透明表面，保证表格可读性 -->
                 <div class="material-solid card">
-                    <!-- 外链巡检：状态统计 + 扫描 + 一键清理 -->
-                    <div class="material-regular mb-4 flex flex-wrap items-center gap-3 px-3 py-2.5">
+                    <!-- 外链巡检：状态统计 + 扫描 + 一键清理。
+                         不再套独立材质：浅色材质叠在实心卡片上会互相干扰，
+                         这一行靠间距与排版与下方筛选区分组即可。 -->
+                    <div class="mb-4 flex flex-wrap items-center gap-3">
                         <span class="type-sm text-ink-2">
                             外链巡检
                             <span v-if="health" class="text-ink-3">
