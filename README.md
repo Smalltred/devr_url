@@ -30,6 +30,9 @@ Demo 地址 👉 [u.hecady.com](https://u.hecady.com)
   后台可按状态筛选、一键清理失效项或就地更新链接；默认 24 小时复检一次；
 - **点击统计**：跳转时自动记录点击（UTC 日切分、来源域名、设备类型、IP 匿名哈希估算独立访客），
   原始 IP 与 User-Agent 不入库；
+- **SEO 与分享卡片**：内置 title/description、canonical、Open Graph、Twitter Card、微信/QQ 抓取器读取的
+  `itemprop` 与 300×300 缩略图、JSON-LD 结构化数据；构建时生成 `robots.txt` 与 `sitemap.xml`。
+  后台与短码跳转统一标记 `noindex`，避免短链与目标页重复收录；
 - **隐私与安全**：登录态 HttpOnly Cookie、登录失败限流（15 分钟 5 次）、创建短链限流（默认 60 次/分钟/IP）、
   写操作同源校验、请求体与 URL 长度上限、安全响应头（CSP 等）默认开启、密码与 API Key 仅存哈希。
 
@@ -120,6 +123,29 @@ API 细节见 [docs/API.md](docs/API.md)。
 cd backend && npm run scan-links -- --budget=600
 ```
 
+## SEO 与分享
+
+首页的 title、description、canonical、Open Graph、Twitter Card、微信/QQ 抓取器读取的 `itemprop`
+与 `image_src`、JSON-LD 结构化数据都写在 `apple-frontend/index.html`，构建时由 `VITE_SITE_URL`
+替换为绝对地址，并生成 `dist/robots.txt` 与 `dist/sitemap.xml`：
+
+```bash
+# .env（项目根目录）
+VITE_SITE_URL=https://your-domain.com
+```
+
+- **必须是 https**：微信、QQ 等抓取器要求分享图与页面使用绝对 HTTPS 地址；未配置时回退到
+  `APP_URL`（仅当其协议为 https），再回退到 `https://devr.cn`；
+- **分享封面**：`apple-frontend/public/og-cover.png`（1200×630，Open Graph）与
+  `share-thumb.png`（300×300，微信/QQ 缩略图），替换这两个文件即可换图；
+- **不收录的路径**：后台 `/admin` 返回 noindex 且带 `X-Robots-Tag`；短码跳转同样带
+  `X-Robots-Tag: noindex, nofollow`，避免短链与目标页重复收录；`robots.txt` 另禁止 `/api/` 与 `/healthz`；
+- **访客访问**：若在后台关闭「访客访问」（要求创建短链必须登录），首页会把未登录访问者重定向到
+  `/admin`，搜索引擎也无法收录首页。需要 SEO 时请保持访客访问开启；
+- **微信自定义分享**：不带公众号 JS-SDK 时，微信使用页面 title、description 与页面内图片生成分享卡片；
+  若需精确控制微信好友/朋友圈的标题、摘要与缩略图，需要公众号的 AppID/AppSecret 并接入
+  `wx.config` 与 `updateAppMessageShareData`（当前未集成，避免在无凭据时暴露密钥）。
+
 ## 管理后台
 
 访问 `/admin` 进入管理面板（首页页头也有入口），支持：
@@ -139,7 +165,7 @@ cd backend && npm run scan-links -- --budget=600
 
 - **短链最小长度**（1-16）：新短码不足该长度时自动补齐，已有短链不受影响；
 - **随机短码**：开启后新短码随机生成、不可预测（要求长度 ≥ 3，落库前查重）；
-- **创建短链需要登录**：开启后首页仅管理员可生成短链，未登录访问首页将跳转登录页
+- **允许游客访问**：默认开启；关闭后首页仅管理员可用，未登录访客无法生成短链，访问首页将跳转登录页
   （此时登录页不再显示「返回首页」，避免往返循环）；
 - **修改密码**：校验当前密码后更新（新密码至少 8 位），哈希优先于环境变量配置，并**撤销全部登录态**（所有端强制重新登录）。
 - **短链缓存**：查看 Memcached 运行状态与命中统计，并配置缓存有效期与负缓存时长（0 = 关闭）。
@@ -257,6 +283,7 @@ node deploy/build-baota-package.mjs   # 生成 baota-package/ 与 baota-package.
 | ADMIN_TOKEN_TTL_DAYS | 7 | 登录态有效期（天） |
 | DIST_INDEX | dist/index.html | `/admin` 返回的 SPA 入口 |
 | VITE_API_BASE_URL | 空 | 前端 API 地址，构建时读取，留空为同源 |
+| VITE_SITE_URL | https://devr.cn | 构建时写入 canonical / Open Graph / sitemap 的站点地址，须为 https；未配置时优先沿用协议为 https 的 APP_URL |
 | ALLOWED_ORIGINS | 空 | 额外允许的跨站写操作来源（逗号分隔）；留空 = 仅同源 |
 | CSRF_ALLOW_MISSING_ORIGIN | false | 写请求缺少 Origin/Referer 时是否放行（默认拒绝） |
 | IP_HASH_SECRET | 空 | 设置后 IP 匿名哈希改用 HMAC-SHA256，密钥不随库存储（推荐设置） |

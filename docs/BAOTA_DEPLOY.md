@@ -117,7 +117,12 @@ location ~ ^/(backend|storage|src|node_modules|tests|deploy|docs)/ {
     deny all;
     return 404;
 }
-location ~* \.(?:js|css|png|jpe?g|gif|webp|ico|svg|woff2?|ttf|map|json|txt|html|webmanifest)$ {
+location ~* \.(?:html?|txt|xml)$ {
+    try_files $uri =404;
+    expires -1;
+    access_log off;
+}
+location ~* \.(?:js|css|png|jpe?g|gif|webp|ico|svg|woff2?|ttf|map|json|webmanifest)$ {
     try_files $uri =404;
     expires 30d;
     access_log off;
@@ -139,6 +144,10 @@ location @backend {
 ```
 
 完整参考见 [deploy/nginx/short-url.conf](../deploy/nginx/short-url.conf)。
+
+> `index.html`、`robots.txt`、`sitemap.xml` 走第一条规则（`expires -1`，不缓存），
+> 保证重新构建部署后能被搜索引擎与分享抓取器立即读到新内容；带 hash 的
+> `assets/*.js|css` 与图片走长缓存。
 
 ## 7. SQLite 数据
 

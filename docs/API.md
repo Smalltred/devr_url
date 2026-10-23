@@ -12,7 +12,7 @@ Content-Type: application/json
 }
 ```
 
-> 若管理后台开启「创建短链需要登录」，本接口未登录时返回 `401 {"error":"Unauthorized"}`。
+> 若管理后台关闭「允许游客访问」，本接口未登录时返回 `401 {"error":"Unauthorized"}`。
 
 **成功（200）**
 
@@ -185,7 +185,7 @@ GET /api/auth/me
 }
 ```
 
-`require_login` 为后台「创建短链需要登录」开关状态，首页据此决定是否跳转登录页。
+`require_login` 为后台「允许游客访问」开关的反义状态（游客访问关闭时为 `true`），首页据此决定是否跳转登录页。
 
 ### 全站概览
 
@@ -350,6 +350,7 @@ GET /api/admin/settings
 {
     "code_min_length": 1,
     "code_random": false,
+    "guest_access_enabled": true,
     "require_login": false,
     "password_source": "env",
     "cache_ttl": 300,
@@ -376,14 +377,16 @@ GET /api/admin/settings
 PUT /api/admin/settings
 Content-Type: application/json
 
-{"code_min_length": 4, "code_random": true, "require_login": false, "cache_ttl": 600, "cache_negative_ttl": 45, "health_scan_hour": 12, "health_scan_minute": 0, "health_dead_threshold": 3}
+{"code_min_length": 4, "code_random": true, "guest_access_enabled": true, "cache_ttl": 600, "cache_negative_ttl": 45, "health_scan_hour": 12, "health_scan_minute": 0, "health_dead_threshold": 3}
 ```
 
 各键均可省略（保持原值）。规则：
 
 - `code_min_length`：1-16 的整数，否则 400；新短码不足该长度时自动补齐；
 - `code_random`：布尔。开启后新短码随机生成（要求有效长度 ≥ 3，否则 400，落库前查重）；
-- `require_login`：布尔。开启后 `POST /url`、`POST /api/url` 需登录，未登录返回 401；
+- `guest_access_enabled`：布尔，是否允许游客访问。关闭后 `POST /url`、`POST /api/url` 需登录，未登录返回 401；
+- `require_login`：`guest_access_enabled` 的反义键，仅为兼容旧前端/调用方保留。两个键等价，同时提交时以
+  `guest_access_enabled` 为准，服务端始终同步写入两者；
 - `cache_ttl`：0-86400 的整数（秒），短链跳转结果的缓存有效期，0 = 不缓存；
 - `cache_negative_ttl`：0-3600 的整数（秒），缓存“短码不存在”的时长（抵御扫描流量），0 = 关闭；
 - `health_scan_enabled`：布尔，是否启用每日定时巡检；
@@ -418,7 +421,7 @@ IP 匿名哈希 sha256(ip+盐) 前 24 位用于独立访客估算）。HEAD 请�
 
 供外部程序程序化创建短链。鉴权使用管理后台「设置」页创建的 API Key，
 `Authorization: Bearer <key>` 或 `X-API-Key: <key>` 请求头二选一；
-缺失或无效返回 `401 {"error":"Invalid API Key"}`。**不受「创建短链需要登录」门控影响**。
+缺失或无效返回 `401 {"error":"Invalid API Key"}`。**不受「允许游客访问」开关影响**。
 
 Key 安全模型：明文仅在创建/重置响应中出现一次，服务端只存 sha256 哈希；
 列表只暴露前缀；重置后旧 Key 立即失效。
