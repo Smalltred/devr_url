@@ -295,7 +295,7 @@ node deploy/build-baota-package.mjs   # 生成 baota-package/ 与 baota-package.
 | CREATE_RATE_LIMIT_MAX | 60 | 单 IP 在窗口内允许创建的短链数；0 = 关闭限流 |
 | CREATE_RATE_LIMIT_WINDOW | 60 | 创建限流窗口（秒） |
 | PRIVACY_STORE_REFERER | false | 是否保存完整 Referer；默认仅保存来源域名 |
-| TRUST_PROXY | true | 信任来自回环/私网的反向代理头（`X-Real-IP`/`X-Forwarded-For`），用于真实 IP 与限流；应用直接暴露公网时设为 false |
+| TRUST_PROXY | true | 信任来自回环/私网的反向代理头（`X-Real-IP`/`X-Forwarded-For`，后者取最右侧可信项），用于真实 IP 与限流；应用直接暴露公网时设为 false |
 | HSTS_MAX_AGE | 0 | HSTS 有效期（秒）；确认全站 HTTPS 后设为 31536000 |
 | CSP_SCRIPT_EXTRA | 空 | CSP 额外放行的脚本来源；留空默认放行 Google Analytics |
 | CSP_CONNECT_EXTRA | 空 | 跨域部署时加入 CSP connect-src 的后端源 |

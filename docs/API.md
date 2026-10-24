@@ -113,7 +113,7 @@ GET /healthz
 | 创建频次 | 公开接口与开放 API 共用计数，默认 60 次/分钟/IP，超出 `429`；`CREATE_RATE_LIMIT_MAX=0` 关闭。 |
 | 安全响应头 | 所有响应带 CSP、`X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`、`Referrer-Policy`、`Permissions-Policy`；`HSTS_MAX_AGE>0` 且请求为 HTTPS 时追加 HSTS。 |
 | 来源统计 | 默认只保存来源域名（`referer_host`），不保存完整 Referer（可能含查询串密钥）；`PRIVACY_STORE_REFERER=true` 可改回完整保存。 |
-| 创建者信息 | 创建短链时记录创建者身份、真实 IP 与 User-Agent（用于后台统计，仅管理员可查）；点击 IP 仍只保存匿名哈希。反向代理部署下默认信任来自回环/私网的 `X-Real-IP`、`X-Forwarded-For`；如应用直接暴露公网可设 `TRUST_PROXY=false` 关闭。 |
+| 创建者信息 | 创建短链时记录创建者身份、真实 IP 与 User-Agent（用于后台统计，仅管理员可查）；点击 IP 仍只保存匿名哈希。反向代理部署下默认信任来自回环/私网的 `X-Real-IP`、`X-Forwarded-For`（`X-Forwarded-For` 从右往左取，采用最近代理追加的地址，客户端可伪造的左侧条目不会被采信）；如应用直接暴露公网可设 `TRUST_PROXY=false` 关闭。 |
 
 ## curl 示例
 
