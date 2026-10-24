@@ -182,9 +182,13 @@ GET /api/auth/me
 ```json
 {
     "authenticated": false,
-    "require_login": false
+    "require_login": false,
+    "admin_entry_custom": false
 }
 ```
+
+已登录时额外返回 `admin_path`（当前安全入口，默认 `/admin`），供首页「管理后台」链接使用。
+匿名响应只给出 `admin_entry_custom` 布尔值，不泄露自定义入口的具体路径。
 
 `require_login` 为后台「允许游客访问」开关的反义状态（游客访问关闭时为 `true`），首页据此决定是否跳转登录页。
 
@@ -208,7 +212,7 @@ GET /api/admin/overview?period=day
 }
 ```
 
-`daily` 为按 `period` 聚合的全站点击数（UTC 口径），缺失桶补零：日粒度近 14 天；
+`daily` 为按 `period` 聚合的全站点击数（北京时间口径，UTC+8），缺失桶补零：日粒度近 14 天；
 周粒度近 12 周（周一为桶起点）；月粒度近 12 个月；年粒度近 5 年。
 
 ### 短链分页列表
@@ -234,7 +238,7 @@ GET /api/admin/links?page=1&per_page=20&q=关键词
 }
 ```
 
-`created_at` 为 UTC 时间。
+`created_at` 为北京时间（UTC+8）。
 
 列表项还包含外链健康状态：
 
@@ -251,6 +255,7 @@ GET /api/admin/links?page=1&per_page=20&q=关键词
 - `health_status`：`ok` 正常 / `broken` 失效（待确认）/ `dead` 失效（已确认）/ `unknown` 未检测或无法判定；
   产品上 `broken` 与 `dead` 统一称「失效」，两个状态只用于内部决定复检节奏；
 - `health_fail_count`：连续失败次数，成功一次即清零；
+- `health_checked_at` 与汇总里的 `last_scan_at` 均为北京时间（UTC+8）；
 - 响应另含 `health` 汇总：
   `{"ok": 2, "invalid": 4, "broken": 1, "dead": 3, "unknown": 1, "pending": 0, "last_scan_at": "...", "dead_threshold": 3}`，
   其中 `invalid = broken + dead`。
@@ -357,7 +362,7 @@ GET /api/admin/links/{code}/stats?period=day
 - `label`：用于展示的创建者名称，API Key 取创建时填写的 Key 名称；
 - `ip`：创建短链时的真实客户端 IP（反向代理下读取 `X-Real-IP` / `X-Forwarded-For`，见下）；
 - `device` / `device_type`：由创建时的 User-Agent 粗解析出的设备、系统与浏览器；
-- `created_at`：创建时间（UTC）。
+- `created_at`：创建时间（北京时间）。
 
 ### 站点设置
 
@@ -371,6 +376,7 @@ GET /api/admin/settings
     "code_random": false,
     "guest_access_enabled": true,
     "require_login": false,
+    "admin_path": "/admin",
     "password_source": "env",
     "cache_ttl": 300,
     "cache_negative_ttl": 30,
@@ -396,7 +402,7 @@ GET /api/admin/settings
 PUT /api/admin/settings
 Content-Type: application/json
 
-{"code_min_length": 4, "code_random": true, "guest_access_enabled": true, "cache_ttl": 600, "cache_negative_ttl": 45, "health_scan_hour": 12, "health_scan_minute": 0, "health_dead_threshold": 3}
+{"code_min_length": 4, "code_random": true, "guest_access_enabled": true, "admin_path": "/jHSvUeqq", "cache_ttl": 600, "cache_negative_ttl": 45, "health_scan_hour": 12, "health_scan_minute": 0, "health_dead_threshold": 3}
 ```
 
 各键均可省略（保持原值）。规则：
@@ -406,10 +412,13 @@ Content-Type: application/json
 - `guest_access_enabled`：布尔，是否允许游客访问。关闭后 `POST /url`、`POST /api/url` 需登录，未登录返回 401；
 - `require_login`：`guest_access_enabled` 的反义键，仅为兼容旧前端/调用方保留。两个键等价，同时提交时以
   `guest_access_enabled` 为准，服务端始终同步写入两者；
+- `admin_path`：管理后台安全入口，默认 `/admin`。需为 3-32 位字母、数字、下划线或连字符（前导 `/` 可省略），
+  否则 400；不能使用 `/api`、`/assets`、`/healthz` 等保留路径，也不能与现有短码重名。修改后旧路径立即返回
+  404（不再提供后台页面），新路径返回后台 SPA；短链跳转与 API 路径不受影响。该配置修改后无需重启；
 - `cache_ttl`：0-86400 的整数（秒），短链跳转结果的缓存有效期，0 = 不缓存；
 - `cache_negative_ttl`：0-3600 的整数（秒），缓存“短码不存在”的时长（抵御扫描流量），0 = 关闭；
 - `health_scan_enabled`：布尔，是否启用每日定时巡检；
-- `health_scan_hour`：0-23 的整数，每日巡检小时（服务器本地时间）；
+- `health_scan_hour`：0-23 的整数，每日巡检小时（北京时间）；
 - `health_scan_minute`：0-59 的整数，每日巡检分钟；
 - `health_dead_threshold`：1-10 的整数，连续失败多少次判定为失效（默认 3）。
 
@@ -432,7 +441,7 @@ Content-Type: application/json
 
 ### 点击采集说明
 
-`GET /{code}` 跳转成功时自动记录一条点击（时间 UTC、来源域名、设备 mobile/desktop、
+`GET /{code}` 跳转成功时自动记录一条点击（时间按北京时间、来源域名、设备 mobile/desktop、
 IP 匿名哈希 sha256(ip+盐) 前 24 位用于独立访客估算）。HEAD 请求不计数；采集失败不影响跳转。
 来源优先取 `Referer`，缺失时退回 `Origin`；两者都没有（聊天软件直接打开、地址栏输入等）
 记为 `referer_host: null`，后台显示为「直接访问」。设备优先参考 `Sec-CH-UA-Mobile`，
@@ -463,7 +472,7 @@ Content-Type: application/json
 - URL 非法（400）：`{"error": "Incorrect URL format"}`；
 - Key 无效（401）：`{"error": "Invalid API Key"}`。
 
-每次成功调用会更新 Key 的最近使用时间（UTC）。
+每次成功调用会更新 Key 的最近使用时间（北京时间）。
 
 ## 管理端：API Key 管理
 
@@ -484,6 +493,8 @@ GET /api/admin/keys
     }]
 }
 ```
+
+列表中的 `created_at` / `last_used_at` 均为北京时间（UTC+8）。
 
 ```http
 POST /api/admin/keys

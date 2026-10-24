@@ -175,7 +175,7 @@ curl -sI http://127.0.0.1:3001/SB
 # location: https://github.com/onee-io/short-url
 ```
 
-浏览器打开站点首页与 `/admin` 应正常显示。
+浏览器打开站点首页与 `/admin` 应正常显示（后台入口可在「设置 → 安全入口」改为自定义路径，改后 `/admin` 返回 404）。
 
 ## 9. 常见问题
 
