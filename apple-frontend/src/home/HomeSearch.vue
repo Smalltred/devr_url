@@ -31,7 +31,7 @@ async function submit() {
 
 <template>
     <div class="mb-8 mt-12">
-        <form class="flex flex-col gap-3 sm:flex-row sm:items-end" @submit.prevent="submit">
+        <form class="url-search-form flex flex-col sm:flex-row sm:items-end" @submit.prevent="submit">
             <label class="url-line-field w-full sm:flex-1">
                 <!-- 链接图标：聚焦时与下划线一起变为品牌色 -->
                 <svg
@@ -59,7 +59,7 @@ async function submit() {
                     spellcheck="false"
                 />
             </label>
-            <AppButton type="submit" :loading="loading" class="w-full sm:w-auto">
+            <AppButton type="submit" :loading="loading" class="url-submit w-full sm:w-auto">
                 {{ loading ? '生成中…' : '生成短链' }}
             </AppButton>
         </form>
@@ -70,25 +70,32 @@ async function submit() {
 </template>
 
 <style scoped>
-/* 极简下划线：无卡片底、无圆角，只保留一条发丝线。
-   聚焦时由中心向两侧展开 2px 品牌色渐变线（可中断的 transform 动画），
-   并让链接图标同步变为品牌色。 */
+/* 极简下划线：输入区直接落在页面底色上，无卡片、无边框。
+   静止时只有文字 + 1px 发丝线；聚焦时 2px 品牌渐变线从中心展开。 */
+.url-search-form {
+    gap: 18px;
+}
+
 .url-line-field {
     --url-line: rgba(26, 35, 56, 0.16);
+    --url-fg: #172033;
+    --url-muted: #7e8898;
     position: relative;
     display: flex;
     align-items: center;
     gap: 10px;
     width: 100%;
-    padding: 8px 4px 14px;
+    padding: 8px 4px 12px;
     cursor: text;
 }
 
 [data-theme='dark'] .url-line-field {
     --url-line: rgba(233, 237, 244, 0.18);
+    --url-fg: #e9edf4;
+    --url-muted: #98a2b6;
 }
 
-/* 默认发丝线 */
+/* 1px 发丝底线 */
 .url-line-field::after {
     content: '';
     position: absolute;
@@ -99,7 +106,7 @@ async function submit() {
     background: var(--url-line);
 }
 
-/* 聚焦时展开的品牌色渐变线：从中心向两侧展开 */
+/* 2px 品牌渐变线：默认从中心收起，聚焦时向两侧展开 */
 .url-line-field::before {
     content: '';
     position: absolute;
@@ -108,28 +115,27 @@ async function submit() {
     bottom: 0;
     height: 2px;
     border-radius: 2px;
-    background: linear-gradient(90deg, var(--color-accent), var(--color-accent-hover));
+    background: linear-gradient(90deg, #3d7bff, #6ea6ff);
     transform: scaleX(0);
     transform-origin: 50% 50%;
-    transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* 悬停或聚焦时展开品牌色渐变线；聚焦时图标与占位提示再进一步响应 */
-.url-line-field:hover::before,
 .url-line-field:focus-within::before {
     transform: scaleX(1);
 }
 
+/* Lucide link-2：与输入文字间距 10px，聚焦时点亮 */
 .url-line-lead {
     width: 18px;
     height: 18px;
     flex: none;
-    color: var(--color-text-tertiary);
+    color: var(--url-muted);
     transition: color 0.25s ease;
 }
 
 .url-line-field:focus-within .url-line-lead {
-    color: var(--color-accent);
+    color: #3d7bff;
 }
 
 .url-line-input {
@@ -139,41 +145,54 @@ async function submit() {
     border: 0;
     outline: 0;
     background: transparent;
-    color: var(--color-text);
-    caret-color: var(--color-accent);
+    color: var(--url-fg);
+    caret-color: #3d7bff;
     font: inherit;
     font-size: 16px;
-    letter-spacing: var(--tracking-base);
 }
 
 .url-line-input::placeholder {
-    color: var(--color-text-tertiary);
-    letter-spacing: var(--tracking-sm);
+    color: var(--url-muted);
     opacity: 1;
     transition: opacity 0.25s ease;
 }
 
-/* 聚焦时弱化占位提示，把注意力让给输入内容 */
 .url-line-input:focus::placeholder {
     opacity: 0.5;
 }
 
-/* 下划线本身就是焦点指示，去掉全局 focus-visible 的矩形描边 */
-.url-line-input:focus-visible {
-    outline: none;
+/* 提交按钮：尺寸、渐变、投影按设计稿固定，不跟随全局按钮样式 */
+.url-submit {
+    height: 42px;
+    min-height: 42px;
+    padding: 0 22px;
+    border: 0;
+    border-radius: 999px;
+    background: linear-gradient(180deg, #5490ff, #3b78f6);
+    color: #fff;
+    font-size: 14.5px;
+    font-weight: 600;
+    letter-spacing: 0;
+    box-shadow:
+        0 1px 2px rgba(15, 23, 42, 0.12),
+        0 10px 22px -12px rgba(61, 120, 246, 0.65);
+    transition:
+        filter 0.2s ease,
+        transform 0.16s ease,
+        box-shadow 0.25s ease;
 }
 
-@media (max-width: 640px) {
-    .url-line-field {
-        padding-bottom: 12px;
-    }
-
-    /* 防止 iOS 聚焦自动缩放 */
-    .url-line-input {
-        font-size: 16px;
-    }
+.url-submit:hover:not(:disabled) {
+    filter: brightness(1.06);
+    background: linear-gradient(180deg, #5490ff, #3b78f6);
 }
 
+.url-submit:active:not(:disabled),
+.url-submit.is-pressed:not(:disabled) {
+    transform: scale(0.965);
+}
+
+/* 减弱动效：不播放展开动画，直接显示/隐藏渐变线 */
 @media (prefers-reduced-motion: reduce) {
     .url-line-field::before,
     .url-line-lead,
