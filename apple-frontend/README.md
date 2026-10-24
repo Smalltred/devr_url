@@ -73,6 +73,11 @@ regular/thin 材质层——两层半透明背景会互相干扰、降低对比�
 
 **排版**：字号 + 字距 + 行高 三元组，大字号负字距、小字号正字距；间距用 rem 尊重用户字号设置。
 
+**首页输入框（定稿）**：极简下划线形态——无卡片底、无边框，静止时只有文字 + 1px 发丝线；
+2px 品牌渐变线**只在聚焦时**从中心向两侧展开（无 hover 展开效果），链接图标同步点亮。
+提交按钮与渐变色按设计稿固定数值（42px 高、胶囊形、`#5490ff → #3b78f6` 渐变），
+不跟随全局 `AppButton` 样式；`prefers-reduced-motion` 下直接显示渐变线，不播放展开动画。
+
 **无障碍**：补齐 `role=alert`、`aria-live`、`role=tablist/tab/tabpanel`、图表语义；
 支持 `prefers-reduced-motion`（位移降级为交叉淡入）、`prefers-reduced-transparency`、
 `prefers-contrast`。
