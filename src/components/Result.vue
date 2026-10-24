@@ -9,11 +9,27 @@ const { entity } = useShortUrl()
 const showCopied = ref(false)
 let copiedTimer = null
 
+// data URL 本地解码为 Blob：fetch(dataUrl) 会被 CSP connect-src 'self' 拦截
+function qrDataUrlToBlob(dataUrl) {
+    const [header, payload] = String(dataUrl).split(',')
+    if (!payload) throw new Error('二维码数据无效')
+
+    const mime = /^data:([^;]+)/i.exec(header)?.[1] || 'image/png'
+    const binary = /;base64/i.test(header)
+        ? atob(payload)
+        : decodeURIComponent(payload)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i)
+    }
+
+    return new Blob([bytes], { type: mime })
+}
+
 // 下载二维码事件
-const handleDownload = async () => {
-    const res = await fetch(entity.value.qrcode)
-    const blob = await res.blob()
-    saveAs(blob, `QRCode_${entity.value.code}.png`)
+const handleDownload = () => {
+    if (!entity.value) return
+    saveAs(qrDataUrlToBlob(entity.value.qrcode), `QRCode_${entity.value.code}.png`)
 }
 
 // 复制短链接事件

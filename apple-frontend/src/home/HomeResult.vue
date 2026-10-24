@@ -58,11 +58,32 @@ function handleCopy() {
     }, 3000)
 }
 
-async function handleDownload() {
+/**
+ * data:image/png;base64,... → Blob。
+ *
+ * 之前用 fetch(dataUrl) 取 Blob，会被 CSP 的 connect-src 'self' 拦截
+ * （fetch 对 data: URL 也走 connect-src），导致「下载二维码」报
+ * TypeError: Failed to fetch。这里直接在本地解码，不发起任何请求。
+ */
+function qrDataUrlToBlob(dataUrl) {
+    const [header, payload] = String(dataUrl).split(',')
+    if (!payload) throw new Error('二维码数据无效')
+
+    const mime = /^data:([^;]+)/i.exec(header)?.[1] || 'image/png'
+    const binary = /;base64/i.test(header)
+        ? atob(payload)
+        : decodeURIComponent(payload)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i += 1) {
+        bytes[i] = binary.charCodeAt(i)
+    }
+
+    return new Blob([bytes], { type: mime })
+}
+
+function handleDownload() {
     if (!entity.value) return
-    const res = await fetch(entity.value.qrcode)
-    const blob = await res.blob()
-    saveAs(blob, `QRCode_${entity.value.code}.png`)
+    saveAs(qrDataUrlToBlob(entity.value.qrcode), `QRCode_${entity.value.code}.png`)
 }
 </script>
 
