@@ -57,18 +57,27 @@ export class ShortUrlService {
 
         if (!this.settings.codeRandom()) {
             const deterministic = this.shortCode.padTo(natural, targetLength)
-            if (!this.urls.exists(deterministic)) {
+            if (!this.urls.exists(deterministic) && !this.#collidesWithAdminPath(deterministic)) {
                 return deterministic
             }
         }
 
         for (let attempt = 0; attempt < RANDOM_MAX_ATTEMPTS; attempt += 1) {
             const candidate = this.shortCode.randomCode(targetLength)
-            if (!this.urls.exists(candidate)) {
+            if (!this.urls.exists(candidate) && !this.#collidesWithAdminPath(candidate)) {
                 return candidate
             }
         }
 
         throw storageError('Unable to generate a unique short code')
+    }
+
+    /**
+     * 短码与后台安全入口同路径时会被入口页遮蔽，必须避开。
+     *
+     * @param {string} code
+     */
+    #collidesWithAdminPath(code) {
+        return `/${code}` === this.settings.adminPath()
     }
 }

@@ -4,6 +4,7 @@
 import { after, before, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { Database } from '../src/db/database.js'
+import { chinaDateString } from '../src/support/chinaTime.js'
 import { startTestServer } from './helpers.js'
 
 describe('管理后台 · 基础', () => {
@@ -67,10 +68,20 @@ describe('管理后台 · 基础', () => {
 
     it('me 返回 authenticated 与 require_login', async () => {
         const authed = await server.request('GET', '/api/auth/me', { cookie: token })
-        assert.deepEqual(authed.json, { authenticated: true, require_login: false })
+        assert.deepEqual(authed.json, {
+            authenticated: true,
+            require_login: false,
+            admin_entry_custom: false,
+            admin_path: '/admin',
+        })
 
+        // 匿名响应不泄露自定义入口
         const anonymous = await server.request('GET', '/api/auth/me')
-        assert.deepEqual(anonymous.json, { authenticated: false, require_login: false })
+        assert.deepEqual(anonymous.json, {
+            authenticated: false,
+            require_login: false,
+            admin_entry_custom: false,
+        })
     })
 
     it('登出撤销 token', async () => {
@@ -189,6 +200,9 @@ describe('管理后台 · 基础', () => {
             assert.equal(stats.json.period, period)
             assert.equal(stats.json.daily.length, buckets)
             assert.equal(stats.json.total_clicks, 3)
+            if (period === 'day') {
+                assert.equal(stats.json.daily.at(-1).date, chinaDateString(), '日桶末位应为北京时间当天')
+            }
             assert.equal(stats.json.visitors, 2)
             assert.equal(stats.json.referers[0].referer_host, 'google.com')
             assert.equal(stats.json.referers[0].clicks, 2)
@@ -281,6 +295,8 @@ describe('管理后台 · 基础', () => {
         // 游客访问默认开启（与旧 require_login 互斥）
         assert.equal(view.json.guest_access_enabled, true)
         assert.equal(view.json.require_login, false)
+        // 后台入口默认 /admin
+        assert.equal(view.json.admin_path, '/admin')
         // 每日巡检默认 12:00、连续 3 次失败判定死链
         assert.equal(view.json.health_scan_enabled, true)
         assert.equal(view.json.health_scan_hour, 12)
@@ -301,6 +317,25 @@ describe('管理后台 · 基础', () => {
         assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { health_scan_minute: 60 } })).status, 400)
         assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { health_dead_threshold: 0 } })).status, 400)
         assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { health_dead_threshold: 11 } })).status, 400)
+
+        // 安全入口校验：长度/字符/保留路径/与现有短码冲突
+        assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { admin_path: 'ab' } })).status, 400)
+        assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { admin_path: '/bad path' } })).status, 400)
+        assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { admin_path: '/api' } })).status, 400)
+        assert.equal((await server.request('PUT', '/api/admin/settings', { cookie: token, body: { admin_path: '/stats1' } })).status, 400)
+
+        // 省略前导斜杠、末尾斜杠都会归一
+        const customPath = await server.request('PUT', '/api/admin/settings', {
+            cookie: token,
+            body: { admin_path: 'my-panel/' },
+        })
+        assert.equal(customPath.status, 200)
+        assert.equal(customPath.json.admin_path, '/my-panel')
+        const restoredPath = await server.request('PUT', '/api/admin/settings', {
+            cookie: token,
+            body: { admin_path: '/admin' },
+        })
+        assert.equal(restoredPath.json.admin_path, '/admin')
 
         const saved = await server.request('PUT', '/api/admin/settings', {
             cookie: token,
@@ -382,6 +417,50 @@ describe('管理后台 · 基础', () => {
         assert.equal(page.status, 200)
         assert.match(page.headers['content-type'], /text\/html/)
         assert.match(page.headers['content-security-policy'], /'sha256-[A-Za-z0-9+/=]+'/)
+        // 前端按该标记挂载 AdminApp
+        assert.match(page.text, /<meta name="devr-app" content="admin">/)
+    })
+
+    it('自定义安全入口：新路径可用、旧路径消失、匿名响应不泄露入口', async () => {
+        const entry = '/Secure-Entry_9'
+        const saved = await server.request('PUT', '/api/admin/settings', {
+            cookie: token,
+            body: { admin_path: entry },
+        })
+        assert.equal(saved.status, 200)
+        assert.equal(saved.json.admin_path, entry)
+
+        // 默认入口彻底消失
+        const oldPath = await server.request('GET', '/admin')
+        assert.equal(oldPath.status, 404)
+
+        // 新入口返回后台页面（含末尾斜杠与 noindex）
+        const page = await server.request('GET', entry)
+        assert.equal(page.status, 200)
+        assert.match(page.text, /<meta name="devr-app" content="admin">/)
+        assert.equal(page.headers['x-robots-tag'], 'noindex, nofollow')
+        assert.equal((await server.request('GET', `${entry}/`)).status, 200)
+        assert.equal((await server.request('POST', entry, { body: '{}' })).status, 405)
+
+        // 匿名只知道「是自定义入口」，拿不到具体路径；登录后才下发
+        const anonymous = await server.request('GET', '/api/auth/me')
+        assert.equal(anonymous.json.admin_entry_custom, true)
+        assert.equal(Object.prototype.hasOwnProperty.call(anonymous.json, 'admin_path'), false)
+        const authed = await server.request('GET', '/api/auth/me', { cookie: token })
+        assert.equal(authed.json.admin_path, entry)
+
+        // 短链跳转不受影响
+        const created = await server.request('POST', '/url', { body: { url: 'https://example.com/entry' } })
+        assert.equal((await server.request('GET', `/${created.json.code}`)).status, 302)
+
+        // 恢复默认入口
+        const reset = await server.request('PUT', '/api/admin/settings', {
+            cookie: token,
+            body: { admin_path: '/admin' },
+        })
+        assert.equal(reset.json.admin_path, '/admin')
+        assert.equal((await server.request('GET', '/admin')).status, 200)
+        assert.equal((await server.request('GET', entry)).status, 404)
     })
 })
 

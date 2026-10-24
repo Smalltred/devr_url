@@ -8,7 +8,7 @@
  *   · 修改密码按钮带 loading 态
  *   · 保存状态用 aria-live 播报
  */
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import copy from 'copy-to-clipboard'
 import api, { errorMessage } from '../services/entity.js'
 import AppButton from '../components/AppButton.vue'
@@ -22,6 +22,13 @@ const codeMinLength = ref(1)
 const codeRandom = ref(false)
 // 游客访问：默认开启；关闭后等价于「创建短链需要登录」
 const guestAccessEnabled = ref(true)
+// 管理后台安全入口：默认 /admin，可改为自定义路径
+const adminPath = ref('/admin')
+const adminEntryUrl = computed(() => {
+    const path = normalizeAdminPathInput(adminPath.value) || '/admin'
+
+    return `${window.location.origin}${path}`
+})
 const passwordSource = ref('env')
 const settingsError = ref('')
 const savingSettings = ref(false)
@@ -87,6 +94,7 @@ function applySettings(data) {
     guestAccessEnabled.value = Boolean(
         data.guest_access_enabled !== undefined ? data.guest_access_enabled : !data.require_login
     )
+    adminPath.value = typeof data.admin_path === 'string' && data.admin_path !== '' ? data.admin_path : '/admin'
     passwordSource.value = data.password_source || 'env'
     cacheTtl.value = data.cache_ttl ?? 300
     cacheNegativeTtl.value = data.cache_negative_ttl ?? 30
@@ -96,6 +104,8 @@ function applySettings(data) {
     healthDeadThreshold.value = data.health_dead_threshold ?? 3
     // 服务端基线：此后与之一致的触发（失焦、重复事件）不再提交
     lastSubmittedPayload = canonicalPayload(data)
+    // 保存后地址栏立即切到新入口；Vite 开发模式没有后端注入标记，跳过
+    syncAdminPathUrl(adminPath.value)
 }
 
 /**
@@ -119,6 +129,41 @@ function parseTimeOfDay(value) {
 }
 
 /**
+ * 安全入口输入归一：补前导斜杠、去掉末尾斜杠。空值保留空串以便提示必填。
+ */
+function normalizeAdminPathInput(value) {
+    let text = String(value ?? '').trim()
+    if (text === '') return ''
+    if (!text.startsWith('/')) text = `/${text}`
+
+    return text.replace(/\/+$/, '')
+}
+
+// 去掉易混淆字符（0/O、1/l/I），避免抄错入口
+const ADMIN_PATH_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
+
+function generateAdminPath() {
+    const bytes = new Uint8Array(8)
+    window.crypto.getRandomValues(bytes)
+    let path = '/'
+    for (const byte of bytes) {
+        path += ADMIN_PATH_ALPHABET[byte % ADMIN_PATH_ALPHABET.length]
+    }
+    adminPath.value = path
+    flushSettingsSave()
+}
+
+/**
+ * 保存成功后把地址栏切到新入口，刷新时仍停在后台。
+ * 只有后端返回的后台页面（带 devr-app 标记）才做，Vite 开发模式跳过。
+ */
+function syncAdminPathUrl(path) {
+    if (!document.querySelector('meta[name="devr-app"]')) return
+    if (typeof path !== 'string' || path === '' || window.location.pathname === path) return
+    window.history.replaceState(null, '', path)
+}
+
+/**
  * 从服务端设置视图提取规范化载荷（用于比对，字段与提交体一致）。
  */
 function canonicalPayload(data) {
@@ -128,6 +173,7 @@ function canonicalPayload(data) {
         guest_access_enabled: Boolean(
             data.guest_access_enabled !== undefined ? data.guest_access_enabled : !data.require_login
         ),
+        admin_path: data.admin_path || '/admin',
         cache_ttl: data.cache_ttl ?? 300,
         cache_negative_ttl: data.cache_negative_ttl ?? 30,
         health_scan_enabled: data.health_scan_enabled !== false,
@@ -213,6 +259,13 @@ function validateSettings() {
         return { payload: null, incomplete: false }
     }
 
+    const normalizedAdminPath = normalizeAdminPathInput(adminPath.value)
+    if (!/^\/[A-Za-z0-9_-]{3,32}$/.test(normalizedAdminPath)) {
+        settingsError.value = '安全入口需为 3-32 位字母、数字、下划线或连字符（以 / 开头）'
+
+        return { payload: null, incomplete: false }
+    }
+
     settingsError.value = ''
 
     return {
@@ -220,6 +273,7 @@ function validateSettings() {
             code_min_length: minLength,
             code_random: codeRandom.value,
             guest_access_enabled: guestAccessEnabled.value,
+            admin_path: normalizedAdminPath,
             cache_ttl: ttl,
             cache_negative_ttl: negativeTtl,
             health_scan_enabled: healthScanEnabled.value,
@@ -237,7 +291,8 @@ function hasEmptyNumberField() {
         String(cacheTtl.value).trim() === '' ||
         String(cacheNegativeTtl.value).trim() === '' ||
         String(healthDeadThreshold.value).trim() === '' ||
-        healthScanTime.value === ''
+        healthScanTime.value === '' ||
+        String(adminPath.value).trim() === ''
     )
 }
 
@@ -491,6 +546,34 @@ function formatTime(value) {
                     />
                 </div>
 
+                <div class="mb-6 border-t border-line pt-5">
+                    <label class="field-label" for="setting-admin-path">
+                        安全入口
+                        <span class="text-danger" aria-hidden="true">*</span>
+                    </label>
+                    <p class="field-hint mb-2">
+                        管理后台的访问路径。修改后原 /admin 立即失效，请改用新地址登录；仅支持 3-32 位字母、数字、下划线或连字符。
+                    </p>
+                    <div class="flex items-center gap-2">
+                        <input
+                            id="setting-admin-path"
+                            v-model="adminPath"
+                            type="text"
+                            class="input min-w-0 flex-1 font-mono"
+                            placeholder="/admin"
+                            spellcheck="false"
+                            autocomplete="off"
+                            autocapitalize="off"
+                            aria-required="true"
+                            @change="flushSettingsSave"
+                            @blur="flushSettingsSave"
+                            @keyup.enter="flushSettingsSave"
+                        />
+                        <AppButton variant="secondary" size="sm" @click="generateAdminPath">随机生成</AppButton>
+                    </div>
+                    <p class="field-hint mt-2 break-all">当前入口：{{ adminEntryUrl }}</p>
+                </div>
+
                 <div class="mb-4 border-t border-line pt-5">
                     <div class="mb-3 flex items-start justify-between gap-4">
                         <div>
@@ -616,7 +699,7 @@ function formatTime(value) {
             </div>
             <p class="type-xs text-ink-3">
                 每天在指定时间自动检测短链目标地址是否仍可访问；目标不可访问即视为「失效」，
-                可在列表页按「失效」筛选并一键清理。时间使用服务器本地时区。
+                可在列表页按「失效」筛选并一键清理。时间为北京时间（UTC+8）。
             </p>
 
             <div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">

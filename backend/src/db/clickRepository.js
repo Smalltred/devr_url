@@ -1,6 +1,11 @@
 /**
- * 点击统计仓储（SQLite）：UTC 口径，日/周/月/年按 SQLite 日期函数分桶。
+ * 点击统计仓储（SQLite）：存储用 UTC，按北京时间（UTC+8）分桶。
  */
+import { CHINA_OFFSET_SQL, CHINA_OFFSET_SQL_NEGATIVE } from '../support/chinaTime.js'
+
+// 北京时间当天 0 点对应的 UTC 时刻（用于今日计数，仍可走 clicked_at 索引）
+const CHINA_TODAY_START_UTC = `datetime('now', '${CHINA_OFFSET_SQL}', 'start of day', '${CHINA_OFFSET_SQL_NEGATIVE}')`
+
 export class SqliteClickRepository {
     /** @param {import('./database.js').Database} database */
     constructor(database) {
@@ -52,7 +57,7 @@ export class SqliteClickRepository {
         const placeholders = codes.map(() => '?').join(', ')
         const rows = this.database.all(
             `SELECT code, COUNT(*) AS clicks FROM short_url_clicks
-             WHERE code IN (${placeholders}) AND clicked_at >= date('now')
+             WHERE code IN (${placeholders}) AND clicked_at >= ${CHINA_TODAY_START_UTC}
              GROUP BY code`,
             ...codes,
         )
@@ -66,7 +71,7 @@ export class SqliteClickRepository {
 
     todayAll() {
         return Number(
-            this.database.get("SELECT COUNT(*) AS total FROM short_url_clicks WHERE clicked_at >= date('now')")?.total ?? 0,
+            this.database.get(`SELECT COUNT(*) AS total FROM short_url_clicks WHERE clicked_at >= ${CHINA_TODAY_START_UTC}`)?.total ?? 0,
         )
     }
 
@@ -93,7 +98,7 @@ export class SqliteClickRepository {
         const params = []
         let sql = `SELECT ${bucketExpression} AS date, COUNT(*) AS clicks
                    FROM short_url_clicks
-                   WHERE date(clicked_at) >= ${rangeStart}`
+                   WHERE date(clicked_at, '${CHINA_OFFSET_SQL}') >= ${rangeStart}`
         if (code !== null) {
             sql += ' AND code = ?'
             params.push(code)
@@ -159,32 +164,32 @@ export class SqliteClickRepository {
         this.database.run('DELETE FROM short_url_clicks WHERE code = ?', code)
     }
 
-    /** 桶起始日的 SQL 表达式（UTC） */
+    /** 桶起始日的 SQL 表达式（北京时间，UTC+8） */
     static bucketExpression(period) {
         switch (period) {
             case 'week':
-                return "date(clicked_at, '-' || ((cast(strftime('%w', clicked_at) as integer) + 6) % 7) || ' days')"
+                return `date(clicked_at, '${CHINA_OFFSET_SQL}', '-' || ((cast(strftime('%w', clicked_at, '${CHINA_OFFSET_SQL}') as integer) + 6) % 7) || ' days')`
             case 'month':
-                return "date(clicked_at, 'start of month')"
+                return `date(clicked_at, '${CHINA_OFFSET_SQL}', 'start of month')`
             case 'year':
-                return "date(clicked_at, 'start of year')"
+                return `date(clicked_at, '${CHINA_OFFSET_SQL}', 'start of year')`
             default:
-                return 'date(clicked_at)'
+                return `date(clicked_at, '${CHINA_OFFSET_SQL}')`
         }
     }
 
-    /** 统计起点表达式：对齐到当前桶后回退 buckets-1 个桶 */
+    /** 统计起点表达式：对齐到北京时间当前桶后回退 buckets-1 个桶 */
     static rangeStartExpression(period, buckets) {
         const offset = Math.max(1, buckets) - 1
         switch (period) {
             case 'week':
-                return `date('now', '-' || ((cast(strftime('%w','now') as integer) + 6) % 7) || ' days', '-${offset * 7} days')`
+                return `date('now', '${CHINA_OFFSET_SQL}', '-' || ((cast(strftime('%w', 'now', '${CHINA_OFFSET_SQL}') as integer) + 6) % 7) || ' days', '-${offset * 7} days')`
             case 'month':
-                return `date('now', 'start of month', '-${offset} months')`
+                return `date('now', '${CHINA_OFFSET_SQL}', 'start of month', '-${offset} months')`
             case 'year':
-                return `date('now', 'start of year', '-${offset} years')`
+                return `date('now', '${CHINA_OFFSET_SQL}', 'start of year', '-${offset} years')`
             default:
-                return `date('now', '-${offset} days')`
+                return `date('now', '${CHINA_OFFSET_SQL}', '-${offset} days')`
         }
     }
 }

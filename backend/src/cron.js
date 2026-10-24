@@ -1,38 +1,44 @@
 /**
  * 每日定时巡检（进程内调度，无需外部 cron）。
  *
- * - 每天在后台「设置」页配置的时刻（默认 12:00，服务器本地时间）执行一轮；
+ * - 每天在后台「设置」页配置的时刻（默认 12:00，北京时间 UTC+8）执行一轮；
  * - 每 30 秒检查一次是否到点；到点后用 app_meta 的日期标记抢占，
  *   多进程（PM2 cluster）部署时保证当天只有一个进程执行；
  * - 进程在当天到点后才启动时，会补跑一次（日期标记保证只补一次）；
  * - 后台修改时间/开关后无需重启，下一轮检查即生效。
  */
+import { CHINA_OFFSET_HOURS, chinaDateString } from './support/chinaTime.js'
+
 const CHECK_INTERVAL_MS = 30_000
 const STARTUP_DELAY_MS = 5_000
 const CLAIM_KEY = 'health_scan_last_date'
+const OFFSET_MS = CHINA_OFFSET_HOURS * 3600 * 1000
 
 /**
- * 当天计划执行时间（服务器本地时区）。
+ * 北京时间当天计划执行时刻对应的 Date。
  *
  * @param {Date} now
- * @param {number} hour
+ * @param {number} hour 北京时间小时（0-23）
  * @param {number} minute
  * @returns {Date}
  */
 export function scheduledFor(now, hour, minute) {
-    const scheduled = new Date(now.getTime())
-    scheduled.setHours(
+    const shifted = new Date(now.getTime() + OFFSET_MS)
+    const scheduledInChina = Date.UTC(
+        shifted.getUTCFullYear(),
+        shifted.getUTCMonth(),
+        shifted.getUTCDate(),
         Math.max(0, Math.min(23, Number(hour) || 0)),
         Math.max(0, Math.min(59, Number(minute) || 0)),
         0,
         0,
     )
 
-    return scheduled
+    return new Date(scheduledInChina - OFFSET_MS)
 }
 
 /**
- * 是否已过当天计划时刻。
+ * 是否已过北京时间当天计划时刻。
  *
  * @param {Date} now
  * @param {number} hour
@@ -43,16 +49,12 @@ export function isDailyRunDue(now, hour, minute) {
 }
 
 /**
- * 本地日期键（YYYY-MM-DD），用于“每天只跑一次”的抢占标记。
+ * 北京时间日期键（YYYY-MM-DD），用于“每天只跑一次”的抢占标记。
  *
  * @param {Date} date
  */
-export function localDateKey(date) {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-
-    return `${year}-${month}-${day}`
+export function chinaDateKey(date) {
+    return chinaDateString(date)
 }
 
 /**
@@ -103,8 +105,8 @@ export function startHealthScanCron(healthService, config, logger, settings, met
             return
         }
 
-        // 多进程下只有一个进程能抢占到当天的执行权
-        if (!meta.claim(CLAIM_KEY, localDateKey(now))) {
+        // 多进程下只有一个进程能抢占到当天的执行权（按北京时间跨天）
+        if (!meta.claim(CLAIM_KEY, chinaDateKey(now))) {
             return
         }
 

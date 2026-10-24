@@ -1,14 +1,17 @@
 /**
- * 管理端设置：短码长度/随机性、创建需登录、后台改密哈希、缓存 TTL。
+ * 管理端设置：短码长度/随机性、创建需登录、后台安全入口、后台改密哈希、缓存 TTL。
  *
  * 默认值与 PHP 版一致（顺序短码、长度不限、无需登录），保证存量部署升级无感。
  * 缓存 TTL 的缺省值来自环境变量，数据库值优先；读取时按范围夹紧。
  */
+import { DEFAULT_ADMIN_PATH, normalizeAdminPath } from '../support/adminPath.js'
+
 export const SETTINGS_KEYS = {
     codeMinLength: 'code_min_length',
     codeRandom: 'code_random',
     requireLogin: 'require_login',
     guestAccess: 'guest_access_enabled',
+    adminPath: 'admin_path',
     adminPasswordHash: 'admin_password_hash',
     cacheTtl: 'cache_ttl',
     cacheNegativeTtl: 'cache_negative_ttl',
@@ -97,6 +100,21 @@ export class SettingsService {
         return !this.guestAccessEnabled()
     }
 
+    /**
+     * 管理后台入口路径。库内只存合法值；异常/空值回落到 /admin。
+     */
+    adminPath() {
+        const raw = this.all()[SETTINGS_KEYS.adminPath]
+        const normalized = normalizeAdminPath(raw)
+
+        return /^\/[A-Za-z0-9_-]{3,32}$/.test(normalized) ? normalized : DEFAULT_ADMIN_PATH
+    }
+
+    /** 是否使用了非默认入口（首页据此决定是否隐藏登录跳转） */
+    isCustomAdminPath() {
+        return this.adminPath() !== DEFAULT_ADMIN_PATH
+    }
+
     adminPasswordHash() {
         return String(this.all()[SETTINGS_KEYS.adminPasswordHash] ?? '')
     }
@@ -126,7 +144,7 @@ export class SettingsService {
         return raw === undefined ? this.defaultHealthScanEnabled : raw === '1' || raw === 'true'
     }
 
-    /** 每日巡检小时（0-23，服务器本地时间） */
+    /** 每日巡检小时（0-23，北京时间） */
     healthScanHour() {
         const raw = this.all()[SETTINGS_KEYS.healthScanHour]
         const value = raw === undefined ? this.defaultHealthScanHour : Number.parseInt(raw, 10)

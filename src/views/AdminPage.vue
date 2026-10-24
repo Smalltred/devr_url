@@ -365,7 +365,7 @@ function showNotice(message) {
                         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
                             <h2 class="text-base font-semibold">
                                 全站点击趋势
-                                <span class="ml-1 text-xs font-normal text-ink-3">UTC 口径</span>
+                                <span class="ml-1 text-xs font-normal text-ink-3">北京时间</span>
                             </h2>
                             <PeriodSwitch :model-value="period" @update:model-value="onPeriodChange" />
                         </div>

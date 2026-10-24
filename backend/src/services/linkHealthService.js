@@ -5,6 +5,7 @@
  * 只刷新检测时间，避免重复探测，也不会被一键清理误删。
  */
 import { utcDateTime } from '../db/database.js'
+import { utcToChinaDateTime } from '../support/chinaTime.js'
 
 const DEFAULT_BATCH = 20
 const MAX_BATCH = 100
@@ -171,7 +172,7 @@ export class LinkHealthService {
             dead: summary.dead,
             unknown: summary.unknown,
             pending: this.urls.countPendingHealthCheck(this.#staleBefore(), this.#unknownBefore()),
-            last_scan_at: scanInfo.last_scan_at,
+            last_scan_at: utcToChinaDateTime(scanInfo.last_scan_at),
             dead_threshold: Math.max(1, Number(this.settings.healthDeadThreshold()) || 3),
         }
     }

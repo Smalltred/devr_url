@@ -30,13 +30,13 @@ async function submit() {
 </script>
 
 <template>
-    <div class="material-thick material-edge card mb-8 mt-12">
-        <form class="flex flex-col gap-3 sm:flex-row" @submit.prevent="submit">
+    <div class="mb-8 mt-12">
+        <form class="flex flex-col gap-3 sm:flex-row sm:items-end" @submit.prevent="submit">
             <input
                 ref="input"
                 v-model="url"
                 type="text"
-                class="input flex-1"
+                class="url-line-input w-full sm:flex-1"
                 placeholder="请输入 http:// 或 https:// 开头的网址"
                 aria-label="原始网址"
                 autocomplete="url"
@@ -51,3 +51,58 @@ async function submit() {
         <p v-if="error" class="field-error" role="alert">{{ error }}</p>
     </div>
 </template>
+
+<style scoped>
+/* 首页输入框采用「下划线」形态：无卡片底、无圆角，
+   默认灰色细线，悬停/聚焦时变为强调色粗线。
+   用 inset 阴影叠加第二像素，避免改变边框宽度导致文字上下跳动。 */
+.url-line-input {
+    width: 100%;
+    height: 64px;
+    padding: 0 2px 10px;
+    color: var(--color-text);
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.45);
+    border-radius: 0;
+    outline: none;
+    appearance: none;
+    font-family: inherit;
+    font-size: var(--text-lg);
+    letter-spacing: var(--tracking-base);
+    transition:
+        border-color var(--duration-fast) var(--ease),
+        box-shadow var(--duration-fast) var(--ease);
+}
+
+.url-line-input::placeholder {
+    color: var(--color-text-tertiary);
+    letter-spacing: var(--tracking-sm);
+}
+
+.url-line-input:hover,
+.url-line-input:focus {
+    border-bottom-color: var(--color-accent);
+    box-shadow: inset 0 -1px 0 var(--color-accent);
+}
+
+/* 下划线本身就是焦点指示，去掉全局 focus-visible 的矩形描边 */
+.url-line-input:focus-visible {
+    outline: none;
+}
+
+@media (max-width: 640px) {
+    .url-line-input {
+        height: 56px;
+        padding-bottom: 8px;
+        /* 防止 iOS 聚焦自动缩放 */
+        font-size: 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .url-line-input {
+        transition: none;
+    }
+}
+</style>

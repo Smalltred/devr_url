@@ -1,10 +1,12 @@
 /**
  * 管理端业务编排：概览、列表、编辑、删除、单链统计、站点设置、外链巡检。
- * 所有时间口径为 UTC，缺失桶在内存中补零；响应结构与 PHP 版逐字段一致。
+ * 数据库存 UTC，统计桶与对外时间统一为北京时间（UTC+8）。
  */
 import { SETTINGS_KEYS } from './settingsService.js'
 import { conflictError, notFoundCode, validationError } from '../support/errors.js'
 import { describeUserAgent } from '../support/userAgent.js'
+import { DEFAULT_ADMIN_PATH, validateAdminPath } from '../support/adminPath.js'
+import { chinaTodayAnchor, utcToChinaDateTime } from '../support/chinaTime.js'
 
 const RESERVED_CODES = ['admin']
 const CODE_PATTERN = /^[0-9A-Za-z]{1,32}$/
@@ -61,6 +63,7 @@ export class AdminService {
             // guest_access_enabled 为规范设置；require_login 保留给旧前端/调用方（二者互斥）
             guest_access_enabled: this.settings.guestAccessEnabled(),
             require_login: this.settings.requireLogin(),
+            admin_path: this.settings.adminPath(),
             password_source: this.settings.hasCustomPassword() ? 'custom' : 'env',
             cache_ttl: this.settings.cacheTtl(),
             cache_negative_ttl: this.settings.cacheNegativeTtl(),
@@ -106,6 +109,18 @@ export class AdminService {
         if (guestAccess !== null) {
             values[SETTINGS_KEYS.guestAccess] = guestAccess ? '1' : '0'
             values[SETTINGS_KEYS.requireLogin] = guestAccess ? '0' : '1'
+        }
+
+        if (Object.prototype.hasOwnProperty.call(body, 'admin_path')) {
+            const result = validateAdminPath(body.admin_path)
+            if (!result.valid) {
+                throw validationError(result.error)
+            }
+            // 自定义入口不能与现有短码重合，否则短链会被入口页遮蔽
+            if (result.value !== DEFAULT_ADMIN_PATH && this.urls.exists(result.value.slice(1))) {
+                throw validationError('该路径已被现有短链占用，请换一个')
+            }
+            values[SETTINGS_KEYS.adminPath] = result.value
         }
 
         if (Object.prototype.hasOwnProperty.call(body, 'cache_ttl')) {
@@ -215,12 +230,12 @@ export class AdminService {
         const items = result.items.map((item) => ({
             code: item.code,
             url: item.url,
-            created_at: item.created_at,
+            created_at: utcToChinaDateTime(item.created_at),
             clicks: totals[item.code] ?? 0,
             clicks_today: todays[item.code] ?? 0,
             health_status: item.health_status,
             health_http_code: item.health_http_code,
-            health_checked_at: item.health_checked_at,
+            health_checked_at: utcToChinaDateTime(item.health_checked_at),
             health_error: item.health_error,
             health_fail_count: item.health_fail_count,
         }))
@@ -265,6 +280,9 @@ export class AdminService {
         }
 
         this.#assertCodeValid(newCode)
+        if (`/${newCode}` === this.settings.adminPath()) {
+            throw validationError('该短码与后台安全入口冲突，请换一个')
+        }
         if (newCode !== code && this.urls.exists(newCode)) {
             throw conflictError()
         }
@@ -374,7 +392,7 @@ export class AdminService {
             device: device.label,
             device_type: device.type,
             user_agent: meta?.creator_ua ?? null,
-            created_at: meta?.created_at ?? null,
+            created_at: utcToChinaDateTime(meta?.created_at ?? null),
         }
     }
 
@@ -391,7 +409,7 @@ export class AdminService {
     }
 
     /**
-     * 把稀疏序列补齐为连续桶（UTC）：
+     * 把稀疏序列补齐为连续桶（北京时间）：
      * day → 最近 14 天；week → 最近 12 周（周一起始）；month → 12 个月；year → 5 年。
      *
      * @param {Array<{date: string, clicks: number}>} series
@@ -399,7 +417,7 @@ export class AdminService {
      */
     #fillSeries(series, period) {
         const byDate = new Map(series.map((point) => [point.date, point.clicks]))
-        const today = Math.floor(Date.now() / 86_400_000) * 86_400_000
+        const today = chinaTodayAnchor()
 
         return AdminService.bucketStarts(today, period).map((date) => ({
             date,
@@ -410,7 +428,7 @@ export class AdminService {
     /**
      * 生成连续桶的起始日列表（升序，末位为当前桶）。
      *
-     * @param {number} today UTC 当日零点（毫秒）
+     * @param {number} today 北京时间当天的日期锚点（毫秒）
      * @param {string} period
      * @returns {string[]}
      */

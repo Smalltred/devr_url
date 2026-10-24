@@ -1,11 +1,16 @@
 <script setup>
 import ThemeToggle from './ThemeToggle.vue'
+
+// 未登录时不显示后台入口
+defineProps({
+    showAdmin: { type: Boolean, default: false },
+})
 </script>
 
 <template>
     <header class="pt-6">
         <div class="flex items-center justify-end gap-2">
-            <a href="/admin" class="btn btn-ghost btn-sm">管理后台</a>
+            <a v-if="showAdmin" href="/admin" class="btn btn-ghost btn-sm">管理后台</a>
             <ThemeToggle />
         </div>
         <div class="mt-14 text-center sm:mt-20">

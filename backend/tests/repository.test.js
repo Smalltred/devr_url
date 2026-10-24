@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { Database, utcDateTime } from '../src/db/database.js'
+import { chinaDateString, chinaTodayAnchor } from '../src/support/chinaTime.js'
 import { SqliteUrlRepository } from '../src/db/urlRepository.js'
 import { SqliteClickRepository } from '../src/db/clickRepository.js'
 
@@ -81,6 +82,34 @@ describe('SQLite 仓储', () => {
             { referer_host: null, clicks: 2 },
             { referer_host: 'google.com', clicks: 1 },
         ])
+    })
+
+    it('今日计数与日桶按北京时间跨日', () => {
+        // 北京时间当天 0 点对应的 UTC 时刻
+        const chinaMidnightUtc = chinaTodayAnchor() - 8 * 3600 * 1000
+        const before = utcDateTime(chinaMidnightUtc - 1000)
+        const after = utcDateTime(chinaMidnightUtc + 1000)
+        database.run(
+            'INSERT INTO short_url_clicks (code, clicked_at, device) VALUES (?, ?, ?)',
+            'boundary',
+            before,
+            'desktop',
+        )
+        database.run(
+            'INSERT INTO short_url_clicks (code, clicked_at, device) VALUES (?, ?, ?)',
+            'boundary',
+            after,
+            'desktop',
+        )
+
+        assert.deepEqual(clicks.todayByCodes(['boundary']), { boundary: 1 })
+
+        const series = clicks.series('boundary', 'day', 2)
+        assert.equal(series.length, 2)
+        assert.equal(series[0].date, chinaDateString(new Date(chinaMidnightUtc - 1000)))
+        assert.equal(series[0].clicks, 1)
+        assert.equal(series[1].date, chinaDateString(new Date(chinaMidnightUtc + 1000)))
+        assert.equal(series[1].clicks, 1)
     })
 
     it('保存创建者信息并在改码后保留', () => {

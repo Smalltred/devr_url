@@ -4,6 +4,7 @@
 import { randomBytes } from 'node:crypto'
 import { notFoundCode, unauthorized, validationError } from '../support/errors.js'
 import { sha256Hex } from '../support/crypto.js'
+import { utcToChinaDateTime } from '../support/chinaTime.js'
 
 const KEY_PREFIX = 'devr_'
 const KEY_RANDOM_BYTES = 16
@@ -60,7 +61,12 @@ export class ApiKeyService {
     }
 
     list() {
-        return this.repository.findAll()
+        // 存储为 UTC，后台展示统一为北京时间
+        return this.repository.findAll().map((item) => ({
+            ...item,
+            created_at: utcToChinaDateTime(item.created_at),
+            last_used_at: utcToChinaDateTime(item.last_used_at),
+        }))
     }
 
     /**

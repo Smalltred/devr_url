@@ -83,7 +83,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                     </div>
                 </div>
 
-                <h3 class="mb-2 text-sm font-semibold">点击趋势（UTC 口径）</h3>
+                <h3 class="mb-2 text-sm font-semibold">点击趋势（北京时间）</h3>
                 <div class="mb-3">
                     <PeriodSwitch :model-value="period" @update:model-value="onPeriodChange" />
                 </div>

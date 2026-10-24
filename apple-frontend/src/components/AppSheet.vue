@@ -31,6 +31,12 @@ const props = defineProps({
      * 从哪里出现，就该回到哪里去），而不是从屏幕中心凭空冒出。
      */
     originRect: { type: Object, default: null },
+    /**
+     * 隐藏内容区滚动条（仍保留滚动能力）。
+     * 仅用于内容已通过布局收敛到可视区、但仍需在极小屏幕上可滚动的面板，
+     * 避免「内容刚好放得下」时也出现一条常驻滚动条。
+     */
+    hideScrollbar: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['close'])
@@ -458,7 +464,12 @@ onUnmounted(() => {
                 </slot>
             </header>
 
-            <div ref="bodyEl" class="sheet-body" :data-sheet-scroll="''">
+            <div
+                ref="bodyEl"
+                class="sheet-body"
+                :class="{ 'is-scrollbar-hidden': hideScrollbar }"
+                :data-sheet-scroll="''"
+            >
                 <slot />
             </div>
 
@@ -480,6 +491,9 @@ onUnmounted(() => {
    实测 overlay 宽 1425 而 clientWidth 为 1440，导致面板居中后偏左 7.5px。
    显式取 100% 宽度即与内容区一致，居中才真正落在视口中央。 */
 .sheet-overlay {
+    /* 弹窗与视口的留白随高度收缩：矮屏（含浏览器缩放）优先把空间让给内容，
+       避免固定 32px 造成「内容差一点放不下」的常驻滚动条。 */
+    --sheet-margin: clamp(10px, 2.5vh, var(--page-padding));
     position: fixed;
     top: 0;
     left: 0;
@@ -489,7 +503,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: var(--page-padding);
+    padding: var(--sheet-margin);
 }
 
 /* 定位层：承载居中，不参与动画。
@@ -529,7 +543,7 @@ onUnmounted(() => {
     width: 100%;
     /* dvh 而非 vh：移动端地址栏收起/展开会改变 vh，导致面板高度跳变；
        dvh 跟随动态视口，尺寸稳定 */
-    max-height: calc(100dvh - 2 * var(--page-padding));
+    max-height: calc(100dvh - 2 * var(--sheet-margin));
     border-radius: var(--radius-xl);
     display: flex;
     flex-direction: column;
@@ -566,7 +580,9 @@ onUnmounted(() => {
 }
 
 .sheet-header {
-    padding: var(--space-5) var(--space-6) var(--space-3);
+    /* 顶部 12px + 抓取条占位 13px ≈ 标题距面板顶 24px；
+       底部 8px 与正文首行形成 8px 的标题/内容间距。 */
+    padding: var(--space-3) var(--space-6) var(--space-2);
     flex: none;
 }
 
@@ -577,6 +593,28 @@ onUnmounted(() => {
     flex: 1 1 auto;
     min-height: 0;
     /* 高度不参与动画：面板尺寸由内容结构与固定高度区域保证稳定（见 script 注释） */
+}
+
+/* 仅统计类面板按需启用：内容已收敛到可视区，滚动条只作为极小屏的兜底交互，
+   不显示常驻滑块（仍可用滚轮/触控板滚动，不是用 overflow:hidden 裁掉内容）。 */
+.sheet-body.is-scrollbar-hidden {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.sheet-body.is-scrollbar-hidden::-webkit-scrollbar {
+    display: none;
+}
+
+/* 矮屏：只收紧底部留白，标题距顶保持 24px 的呼吸感 */
+@media (max-height: 760px) {
+    .sheet-header {
+        padding-bottom: var(--space-2);
+    }
+
+    .sheet-body {
+        padding-bottom: var(--space-3);
+    }
 }
 
 .sheet-footer {

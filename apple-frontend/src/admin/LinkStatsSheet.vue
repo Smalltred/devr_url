@@ -7,7 +7,7 @@
  *   2. 设备分布条带 role=progressbar 与数值语义
  *   3. 内容区可独立滚动，面板本身可下滑关闭
  */
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import api, { errorMessage } from '../services/entity.js'
 import AppStatBars from '../components/AppStatBars.vue'
 import AppPeriodSwitch from '../components/AppPeriodSwitch.vue'
@@ -27,6 +27,25 @@ const loading = ref(true)
 // 趋势粒度：day / week / month / year
 const period = ref('day')
 const periodLoading = ref(false)
+
+// 趋势图高度：普通屏 72px，矮屏收到 56px。
+// 用 matchMedia 而不是固定值，浏览器缩放或窗口变矮时内容仍能整体放进面板。
+const chartHeight = ref(72)
+let compactQuery = null
+
+function syncChartHeight() {
+    chartHeight.value = compactQuery?.matches ? 56 : 72
+}
+
+onMounted(() => {
+    compactQuery = window.matchMedia('(max-height: 760px)')
+    syncChartHeight()
+    compactQuery.addEventListener('change', syncChartHeight)
+})
+
+onUnmounted(() => {
+    compactQuery?.removeEventListener('change', syncChartHeight)
+})
 
 onMounted(async () => {
     try {
@@ -66,6 +85,7 @@ function deviceRatio(value) {
         :title="`短链 ${code} 统计`"
         size="lg"
         :origin-rect="originRect"
+        hide-scrollbar
         @close="emit('close')"
     >
         <!-- URL 行在加载期也用骨架占位：它若不占位，数据到达时会额外撑高一行，
@@ -77,10 +97,10 @@ function deviceRatio(value) {
             :href="stats.url"
             target="_blank"
             rel="noopener"
-            class="type-sm -mt-2 mb-4 block w-full max-w-full break-all whitespace-normal text-ink-3 [overflow-wrap:anywhere] hover:text-accent"
+            class="stats-url type-sm block max-w-full truncate text-ink-3 hover:text-accent"
             :title="stats.url"
         >{{ stats.url }}</a>
-        <div v-else-if="loading" class="skeleton-bar type-sm -mt-2 mb-4" style="width: 70%">&nbsp;</div>
+        <div v-else-if="loading" class="skeleton-bar stats-url type-sm" style="width: 70%">&nbsp;</div>
 
         <p v-if="error" class="field-error" role="alert">{{ error }}</p>
 
@@ -91,7 +111,7 @@ function deviceRatio(value) {
              字号或行高令牌将来调整时，两侧仍会自动对齐。
              `&nbsp;` 用于撑出该字号的行高。 -->
         <div v-else-if="loading" class="stats-skeleton" role="status" aria-label="统计加载中">
-            <div class="mb-5 grid grid-cols-3 gap-3 text-center">
+            <div class="stats-tiles grid grid-cols-3 gap-3 text-center">
                 <div v-for="n in 3" :key="n" class="stat-tile">
                     <div class="skeleton-bar type-lg mx-auto" style="width: 2.5rem">&nbsp;</div>
                     <div class="skeleton-bar type-xs mt-1 mx-auto" style="width: 3.5rem">&nbsp;</div>
@@ -101,12 +121,11 @@ function deviceRatio(value) {
             <!-- 与「点击趋势」h3 同行高 -->
             <div class="skeleton-bar type-sm mb-2 font-semibold" style="width: 7rem">&nbsp;</div>
             <!-- 与粒度切换控件同高（segmented: 4px 内边距 + 36px 按钮） -->
-            <div class="skeleton-bar mb-3" style="height: 2.75rem; width: 11rem" />
-            <!-- 与 .stat-chart 同高：柱区 72px + 横轴 28px = 100px
-                 （数值与下方 AppStatBars 的 height 属性保持一致） -->
-            <div class="skeleton-bar mb-5" style="height: 100px" />
+            <div class="skeleton-bar stats-switch" style="height: 2.75rem; width: 11rem" />
+            <!-- 与 .stat-chart 同高：柱区 chartHeight + 横轴 28px -->
+            <div class="skeleton-bar stats-chart-wrap" :style="{ height: `${chartHeight + 28}px` }" />
 
-            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div class="stats-grid grid grid-cols-1 sm:grid-cols-2">
                 <div>
                     <div class="skeleton-bar type-sm mb-3 font-semibold" style="width: 7rem">&nbsp;</div>
                     <!-- 与空来源区同高（min-height），高度不随条数变化 -->
@@ -126,16 +145,16 @@ function deviceRatio(value) {
             </div>
 
             <!-- 与「创建信息」同高：标题 + 2×2 明细行 -->
-            <div class="mt-5 border-t border-line pt-4">
-                <div class="skeleton-bar type-sm mb-3 font-semibold" style="width: 5rem">&nbsp;</div>
-                <div class="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
+            <div class="stats-creation border-t border-line">
+                <div class="skeleton-bar stats-creation-title type-sm font-semibold" style="width: 5rem">&nbsp;</div>
+                <div class="stats-creation-grid grid grid-cols-1 sm:grid-cols-2">
                     <div v-for="n in 4" :key="n" class="skeleton-bar" style="height: 1.75rem" />
                 </div>
             </div>
         </div>
 
         <template v-else-if="stats">
-            <div class="mb-5 grid grid-cols-3 gap-3 text-center">
+            <div class="stats-tiles grid grid-cols-3 gap-3 text-center">
                 <div class="stat-tile">
                     <div class="tnum type-lg">{{ stats.total_clicks }}</div>
                     <div class="type-xs mt-1 text-ink-3">总点击</div>
@@ -150,15 +169,15 @@ function deviceRatio(value) {
                 </div>
             </div>
 
-            <h3 class="type-sm mb-2 font-semibold">点击趋势（UTC 口径）</h3>
-            <div class="mb-3">
+            <h3 class="type-sm mb-2 font-semibold">点击趋势（北京时间）</h3>
+            <div class="stats-switch">
                 <AppPeriodSwitch :model-value="period" @update:model-value="onPeriodChange" />
             </div>
-            <div :class="[periodLoading ? 'opacity-60' : '', 'mb-5 transition-opacity']">
-                <AppStatBars :series="stats.daily" :period="stats.period || period" :height="72" />
+            <div :class="[periodLoading ? 'opacity-60' : '', 'stats-chart-wrap transition-opacity']">
+                <AppStatBars :series="stats.daily" :period="stats.period || period" :height="chartHeight" />
             </div>
 
-            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div class="stats-grid grid grid-cols-1 sm:grid-cols-2">
                 <div>
                     <h3 class="type-sm mb-3 font-semibold">来源域名 Top 10</h3>
                     <!-- 高度随数据自适应（空态只占一行），超过 8.5rem 后内部滚动：
@@ -228,30 +247,30 @@ function deviceRatio(value) {
             </div>
 
             <!-- 创建信息：补齐弹窗底部空白，展示创建者身份、真实 IP 与设备 -->
-            <div class="mt-5 border-t border-line pt-4">
-                <h3 class="type-sm mb-3 font-semibold">创建信息</h3>
-                <dl class="grid grid-cols-1 gap-x-8 gap-y-2 sm:grid-cols-2">
-                    <div class="flex items-baseline justify-between gap-3 border-b border-line pb-1">
+            <div class="stats-creation border-t border-line">
+                <h3 class="stats-creation-title type-sm font-semibold">创建信息</h3>
+                <dl class="stats-creation-grid grid grid-cols-1 sm:grid-cols-2">
+                    <div class="stats-row flex items-baseline justify-between gap-3 border-b border-line">
                         <dt class="type-xs shrink-0 text-ink-3">创建者</dt>
                         <dd class="type-sm truncate text-right">{{ stats.creator?.label }}</dd>
                     </div>
-                    <div class="flex items-baseline justify-between gap-3 border-b border-line pb-1">
+                    <div class="stats-row flex items-baseline justify-between gap-3 border-b border-line">
                         <dt class="type-xs shrink-0 text-ink-3">创建 IP</dt>
                         <dd class="tnum type-sm select-all truncate text-right">{{ stats.creator?.ip || '—' }}</dd>
                     </div>
-                    <div class="flex items-baseline justify-between gap-3 border-b border-line pb-1">
+                    <div class="stats-row flex items-baseline justify-between gap-3 border-b border-line">
                         <dt class="type-xs shrink-0 text-ink-3">设备</dt>
                         <dd
                             class="type-sm truncate text-right"
                             :title="stats.creator?.user_agent || ''"
                         >{{ stats.creator?.device || '—' }}</dd>
                     </div>
-                    <div class="flex items-baseline justify-between gap-3 border-b border-line pb-1">
-                        <dt class="type-xs shrink-0 text-ink-3">创建时间（UTC）</dt>
+                    <div class="stats-row flex items-baseline justify-between gap-3 border-b border-line">
+                        <dt class="type-xs shrink-0 text-ink-3">创建时间（北京时间）</dt>
                         <dd class="tnum type-sm truncate text-right">{{ stats.creator?.created_at || '—' }}</dd>
                     </div>
                 </dl>
-                <p v-if="stats.creator?.type === 'unknown'" class="type-xs mt-2 text-ink-3">
+                <p v-if="stats.creator?.type === 'unknown'" class="stats-creation-hint type-xs text-ink-3">
                     该短链创建于功能上线前，无法追溯创建者信息。
                 </p>
             </div>
@@ -260,6 +279,42 @@ function deviceRatio(value) {
 </template>
 
 <style scoped>
+/* 统计内容节奏集中在两档：普通屏与矮屏。
+   矮屏（含 125%/150% 浏览器缩放）整体收紧间距，
+   让「创建信息」留在弹窗可视区内，而不是靠隐藏溢出来消除滚动条。 */
+.stats-url {
+    /* 单行显示：超出用省略号，完整地址在 title 与点击打开的页面里。
+       与标题的间距由 header 的 8px 底部内边距提供，不再用负 margin 上提，
+       避免第一行被内容区的 overflow 裁掉。 */
+    margin-bottom: 20px;
+}
+.stats-tiles { margin-bottom: var(--space-5); }
+.stats-switch { margin-bottom: var(--space-3); }
+.stats-chart-wrap { margin-bottom: var(--space-5); }
+.stats-grid { gap: var(--space-5); }
+.stats-creation { margin-top: var(--space-5); padding-top: var(--space-4); }
+.stats-creation-title { margin-bottom: var(--space-3); }
+.stats-creation-grid { gap: var(--space-2) var(--space-8); }
+.stats-creation-hint { margin-top: var(--space-2); }
+.stats-row { padding-bottom: var(--space-1); }
+
+@media (max-height: 760px) {
+    .stats-url { margin-bottom: 18px; }
+    .stats-tiles { margin-bottom: var(--space-3); }
+    .stats-tiles .stat-tile { padding: var(--space-2); }
+    .stats-switch { margin-bottom: var(--space-2); }
+    .stats-chart-wrap { margin-bottom: var(--space-3); }
+    .stats-grid { gap: var(--space-3); }
+    .stats-creation { margin-top: var(--space-3); padding-top: var(--space-3); }
+    .stats-creation-title { margin-bottom: var(--space-2); }
+    .stats-creation-grid { gap: var(--space-1) var(--space-6); }
+    .stats-creation-hint { margin-top: var(--space-1); }
+    .stats-row { padding-bottom: 2px; }
+    /* 矮屏下限制来源列表的最大高度：Top 10 再多也不把创建信息挤出可视区，
+       超出部分仍在框内滚动（页面滚动条保持隐藏，内容不丢失）。 */
+    .stats-grid .referer-box { max-height: 3.5rem; }
+}
+
 /* 设备分布骨架：两行，间距与真实内容的 space-y-3（12px）一致 */
 .stats-skeleton .device-skeleton {
     display: flex;

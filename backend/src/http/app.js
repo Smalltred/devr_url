@@ -150,10 +150,19 @@ export function createApp(config, overrides = {}) {
     })
 
     router.get('/api/auth/me', async (request) => {
-        return Response.json({
-            authenticated: auth.isAuthenticated(request),
+        const authenticated = auth.isAuthenticated(request)
+        const adminPath = settings.adminPath()
+        const payload = {
+            authenticated,
             require_login: settings.requireLogin(),
-        })
+            // 只暴露「是否为自定义入口」，不向匿名访客泄露具体路径
+            admin_entry_custom: adminPath !== '/admin',
+        }
+        if (authenticated) {
+            payload.admin_path = adminPath
+        }
+
+        return Response.json(payload)
     })
 
     // 管理端概览
@@ -263,34 +272,6 @@ export function createApp(config, overrides = {}) {
         return Response.json({ ok: true, links })
     })
 
-    // 管理面板（必须早于 /{code}）
-    router.get('/admin', async () => {
-        const path = config.app.distIndex
-        if (!existsSync(path)) {
-            return Response.text('Frontend build not found. Run "npm run build" first.', 404)
-        }
-        let html = ''
-        try {
-            html = readFileSync(path, 'utf8')
-        } catch {
-            return Response.text('Frontend build not found. Run "npm run build" first.', 404)
-        }
-        if (html === '') {
-            return Response.text('Frontend build not found. Run "npm run build" first.', 404)
-        }
-
-        // 后台不参与搜索收录：静态 index.html 是给首页用的，
-        // 这里在返回前换成 noindex，并同时下发响应头（爬虫优先看头部）
-        html = html.replace(
-            /<meta\s+name=["']robots["'][^>]*>/i,
-            '<meta name="robots" content="noindex, nofollow">',
-        )
-        const response = Response.html(html)
-        response.headers['x-robots-tag'] = 'noindex, nofollow'
-
-        return response
-    })
-
     // 短码跳转（单段兜底，必须最后注册）
     router.get('/{code}', async (request) => {
         const code = request.routeParam('code')
@@ -318,6 +299,53 @@ export function createApp(config, overrides = {}) {
     // ---------------------------------------------------------------- 请求入口
 
     /**
+     * 后台 SPA 入口页面：与首页共用 index.html，注入标记让前端挂载 AdminApp。
+     * 自定义安全入口在请求时判定，改设置后无需重启。
+     */
+    function adminIndexResponse() {
+        const path = config.app.distIndex
+        if (!existsSync(path)) {
+            return Response.text('Frontend build not found. Run "npm run build" first.', 404)
+        }
+        let html = ''
+        try {
+            html = readFileSync(path, 'utf8')
+        } catch {
+            return Response.text('Frontend build not found. Run "npm run build" first.', 404)
+        }
+        if (html === '') {
+            return Response.text('Frontend build not found. Run "npm run build" first.', 404)
+        }
+
+        // 后台不参与搜索收录：静态 index.html 是给首页用的，
+        // 这里在返回前换成 noindex，并同时下发响应头（爬虫优先看头部）
+        html = html.replace(
+            /<meta\s+name=["']robots["'][^>]*>/i,
+            '<meta name="robots" content="noindex, nofollow">',
+        )
+        if (!html.includes('name="devr-app"')) {
+            const marker = '<meta name="devr-app" content="admin">'
+            html = /<\/head>/i.test(html)
+                ? html.replace(/<\/head>/i, `${marker}</head>`)
+                : marker + html
+        }
+
+        const response = Response.html(html)
+        response.headers['x-robots-tag'] = 'noindex, nofollow'
+
+        return response
+    }
+
+    /**
+     * 路径末尾斜杠归一（根路径除外），用于安全入口比较。
+     *
+     * @param {string} path
+     */
+    function trimTrailingSlash(path) {
+        return path.length > 1 ? path.replace(/\/+$/, '') : path
+    }
+
+    /**
      * @param {Request} request
      * @returns {Promise<Response>}
      */
@@ -331,7 +359,23 @@ export function createApp(config, overrides = {}) {
             csrf.assertSafe(request)
 
             const staticResponse = serveStatic(request, config.app.distDir)
-            response = staticResponse ?? (await router.dispatch(request))
+            if (staticResponse !== null) {
+                response = staticResponse
+            } else {
+                const adminPath = settings.adminPath()
+                const requestPath = trimTrailingSlash(request.path)
+                if (requestPath === adminPath) {
+                    // 后台入口只响应页面读取；写方法交给 405，避免被短码兜底吞掉
+                    response = request.method === 'GET' || request.method === 'HEAD'
+                        ? adminIndexResponse()
+                        : Response.json({ error: 'Method Not Allowed' }, 405, { allow: 'GET, HEAD' })
+                } else if (requestPath === '/admin' && adminPath !== '/admin') {
+                    // 已启用自定义入口：默认路径彻底消失，不暴露入口在哪
+                    response = Response.json({ error: 'Not Found' }, 404)
+                } else {
+                    response = await router.dispatch(request)
+                }
+            }
         } catch (error) {
             response = renderError(error)
         }
