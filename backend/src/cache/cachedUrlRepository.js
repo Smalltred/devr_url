@@ -8,6 +8,15 @@
 const NOT_FOUND_MARKER = '\0__devr_miss__'
 const KEY_PREFIX = 'url:'
 
+/**
+ * 允许进入缓存键的短码形态（与管理端短码规则一致，留少量余量）。
+ *
+ * 安全线：短码来自 URL 路径（decodeURIComponent 之后可包含任意字节），
+ * 缓存键最终会拼进 memcached 文本协议命令行。不符合本模式的码一律
+ * 跳过缓存直查数据库——绝不能让请求路径的任意字节进入协议命令。
+ */
+const CACHEABLE_CODE = /^[0-9A-Za-z]{1,64}$/
+
 export class CachedUrlRepository {
     /**
      * @param {object} inner 底层仓储
@@ -33,6 +42,10 @@ export class CachedUrlRepository {
     async findByCode(code) {
         if (!code) {
             return null
+        }
+        if (!CACHEABLE_CODE.test(code)) {
+            // 非法形态的“短码”只可能是扫描/攻击流量：直查数据库，不读也不写缓存
+            return this.inner.findByCode(code)
         }
 
         const cached = await this.#safe(() => this.cache.get(KEY_PREFIX + code), null)

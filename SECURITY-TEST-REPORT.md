@@ -1,554 +1,136 @@
-# Short URL 安全测试报告
+# Short URL 安全测试报告（第二轮 · Node.js 后端）
 
-对应审计报告：[SECURITY-AUDIT.md](SECURITY-AUDIT.md)　修复记录：[SECURITY-FIXES.md](SECURITY-FIXES.md)
+对应审计：[SECURITY-AUDIT.md](SECURITY-AUDIT.md)　修复：[SECURITY-FIXES.md](SECURITY-FIXES.md)
 
 ---
 
-## 1. 测试环境
+## 1. 测试环境与版本
 
-| 项目 | 值 |
+| 项 | 值 |
 | --- | --- |
-| 操作系统 | Windows 10 (10.0.26300) x64 |
-| Shell | Git Bash (MSYS2) |
-| PHP | 8.2.34 (cli) NTS Visual C++ 2019 x64 |
-| PHP 扩展 | `pdo_sqlite`、`sqlite3`、`mbstring`、`json`、`openssl`、`curl`、`fileinfo` |
-| 数据库 | SQLite（WAL） |
-| 后端服务 | PHP 内置服务器（`php -S`），与 `composer serve` 同口径 |
-| 前端构建 | Vite 6.4.3 / Node v24.18.0 / npm 11.16.0 |
-| 浏览器 | ZCode 内置浏览器（Chromium 内核，用于 CSP 与前端功能验证） |
-| 测试框架 | PHPUnit 11.5.57、PHPStan 2.2.17（level 8）、PHP-CS-Fixer 3.95.27 |
-| 审计工具 | `npm audit`、手工源码审计与 HTTP 渗透 |
+| 操作系统 | Windows 10 (10.0.26300) x64，Git Bash |
+| Node | v24.18.0（npm 11.16.0） |
+| 被测服务 | `backend/src/server.js`（与生产同一条入口链路） |
+| 端口 | 修复前 3021 / 修复后 3022（独立端口，**未占用开发用 3001**） |
+| 测试数据库 | `E:/zcode/.tools/audit2/{test,fixtest/test}.sqlite3`（**独立临时库，未触碰 `backend/storage/short-url.sqlite3`**） |
+| 缓存 | 项目自带 `backend/tools/mock-memcached.js`（11221 / 11222，实现 memcached 文本协议） |
+| 服务环境变量 | `APP_ENV=production`、`APP_DEBUG=false`、`ADMIN_PASSWORD=secret123`、`CACHE_DRIVER=memcached`、`IP_HASH_SECRET=audit-secret` |
+| 攻击工具 | 自写 Node 脚本（`node:http` / 原始 socket，完全控制请求行编码，`--path-as-is` 语义） |
+| 测试框架 | `node --test`（backend 既有套件） |
 
-**测试数据隔离说明**：全部实测使用独立临时数据库
-（如 `E:/zcode/.tools/audit4.sqlite3` 等），**未触碰项目仓库内的
-`backend/storage/short-url.sqlite3`**，未修改或删除任何真实数据。
-服务进程使用非默认端口（3111/3121/3131/3141/3151/3161/3181）避免与开发环境冲突。
-
-**本项目未包含 Docker 环境**，因此 Docker 相关项（SEC-015）为静态审阅结论，
-未做容器内运行验证，已在该项标记为 **Potential**。
+**边界遵守**：全部测试针对本机隔离实例；未对第三方发起攻击；未执行压力测试；真实数据库与生产配置未被修改（全程 `git status` 复核，仅新增/修改审计相关源码与文档）。
 
 ---
 
-## 2. 测试命令与结果
-
-### 2.1 自动化工具链
+## 2. 测试命令
 
 ```bash
 cd backend
-
-# 单元 + 功能 + 兼容 + 安全
-php vendor/bin/phpunit --colors=never
-#   ==> OK (172 tests, 479 assertions)
-
-# 仅安全回归套件
-php vendor/bin/phpunit --colors=never --testsuite Security
-#   ==> OK (60 tests, 121 assertions)
-
-# 静态分析（level 8）
-php vendor/bin/phpstan analyse --memory-limit=512M --no-progress
-#   ==> [OK] No errors
-
-# 代码风格
-php vendor/bin/php-cs-fixer fix --dry-run --no-interaction
-#   ==> Found 0 of 73 files that can be fixed
-
-# 依赖审计（PHP）
-#   composer.lock 运行时（packages）条目数 = 0
-#   ==> 无第三方运行时依赖，composer audit 无适用项
+npm test                              # 既有 + 新增回归套件
+node --test tests/cache-security.test.js   # 仅本轮新增
+npm audit                              # 依赖审计
+cd .. && npm audit --omit=dev          # 前端生产依赖审计
 ```
 
-```bash
-cd ..   # 项目根
-
-# 依赖审计（Node）
-npm audit
-#   ==> 7 vulnerabilities (2 moderate, 5 high)
-#       全部位于 tailwindcss → chokidar/braces/micromatch/fast-glob/
-#       postcss-nested → postcss-selector-parser（构建期工具链）
-
-npm audit --omit=dev
-#   ==> found 0 vulnerabilities
-
-# 产物验证
-npm run build
-#   ==> ✓ built in 1.88s
-#       dist/assets/index-ClR0qPvO.js   189.50 kB │ gzip: 71.03 kB
-#       dist/assets/index--FdQwEo2.css   21.68 kB │ gzip:  5.52 kB
-#       无 .map 文件（已确认 dist/ 下不存在 source map）
-```
-
-**测试套件构成**
-
-| 套件 | 用例数 | 说明 |
-| --- | --- | --- |
-| Unit | 45 | 短码生成、URL 校验等纯逻辑 |
-| Feature | 67 | 路由、鉴权、统计、设置、API Key、SQLite 仓库 |
-| Compat | 0（数据文件） | `tests/Compat/expected_codes.php` 为与 Node 版对齐的向量数据 |
-| **Security** | **60** | **本次新增的安全回归套件** |
-| 合计 | **172** | 479 assertions，全部通过 |
-
-### 2.2 攻击面清单实测（未授权访问）
-
-修复后逐一实测，全部返回 401：
-
-| Endpoint | 方法 | 状态码 |
-| --- | --- | --- |
-| `/api/admin/overview` | GET | 401 |
-| `/api/admin/links` | GET | 401 |
-| `/api/admin/links/{code}` | PUT | 401 |
-| `/api/admin/links/{code}` | DELETE | 401 |
-| `/api/admin/links/{code}/stats` | GET | 401 |
-| `/api/admin/settings` | GET | 401 |
-| `/api/admin/settings` | PUT | 401 |
-| `/api/admin/settings/password` | POST | 401 |
-| `/api/admin/keys` | GET | 401 |
-| `/api/admin/keys` | POST | 401 |
-| `/api/admin/keys/{id}/reset` | POST | 401 |
-| `/api/admin/keys/{id}` | DELETE | 401 |
-
-伪造 Cookie（64 字符随机值）访问 `/api/admin/overview` → 401。
+攻击与验证脚本（过程产物，未入仓库）：`attack-cache.mjs`、`verify-core.mjs`、`replay-attacks.mjs`。
 
 ---
 
-## 3. 漏洞复现与修复验证（攻击 Payload 与结果）
+## 3. 测试用例与结果
 
-### 3.1 SEC-001 路径穿越
+### 3.1 SEC-N01 缓存投毒（修复前确认 / 修复后失效）
 
-```bash
-B=http://127.0.0.1:3121
-for p in "/../.env" "/%2e%2e/.env" "/..%2f.env" \
-         "/../backend/storage/short-url.sqlite3" "/../package.json" \
-         "/../backend/composer.lock" "/../backend/app/Services/AuthService.php" \
-         "/../.git/config" "/../.gitignore"; do
-  curl -s --path-as-is -o /tmp/t -w "%{http_code} " "$B$p"; wc -c < /tmp/t
-done
-```
+| 编号 | 用例 | 输入 | 实际结果（修复前） | 预期 | 复现 |
+| --- | --- | --- | --- | --- | --- |
+| T-01 | 原语 A：劫持既有短码 | `GET /%0d%0Aset%20devr%3Aurl%3AS%200%20300%2019%0d%0Ahttps%3A%5C%5Cevil.example`（注入+31s 后访问 `/S`） | **302 `Location: https:\\evil.example`**（原为 `https://example.com/legit-target`） | 始终 302 原地址 | **是** |
+| T-02 | 原语 B：404 DoS | 同上，值换 `\0__devr_miss__`（14 字节）、TTL 86400 | **404 `{"error":"Unknown URL"}`**（数据库中该码真实存在） | 302 原地址 | **是** |
+| T-03 | 原语 C：凭空造码 | 注入 `devr:url:T`，访问 `/T` | **302 `Location: https:\\attacker.test`**（数据库中不存在 T） | 404 | **是** |
+| T-04 | 协议级确认 | 直连 memcached 发送注入命令 | `devr:url:S` 值被改写（`VALUE devr:url:S 0 21 ... https://evil.example/`） | — | **是** |
+| T-14 | **修复后重放 T-01~T-03 全部三类载荷**（端口 3022） | 同上三载荷 + 31s 冷却 + 3 次访问 | `/S` 三次均 **302 原地址**；`/Z` 持续 **404** | 同左 | **否（已失效）** |
 
-| Payload | 修复前 | 修复后 |
+> 攻击细节：注入值用 `\` 代替 `/` 规避路由的单段约束——浏览器按 WHATWG 规范将 `\` 归一化为 `/`，跳转效果等同。注入后客户端因多命令响应无完成标记进入 30s 降级冷却，**投毒在冷却期内已写入**，冷却结束后对全部访客生效——这正是 T-01~T-03 需等待 31s 再断言的原因。
+
+### 3.2 SEC-N02 / SEC-N03 修复验证（新增回归套件 `tests/cache-security.test.js`，12/12 通过）
+
+| 编号 | 用例 | 断言 | 结果 |
+| --- | --- | --- | --- |
+| T-05 | XFF 取最右侧 | `"1.2.3.4, 5.6.7.8"` → `5.6.7.8` | PASS |
+| T-06 | 客户端伪造首项不再被采纳 | `"9.9.9.9, 203.0.113.10"` → `203.0.113.10` | PASS |
+| T-07 | X-Real-IP 优先于 XFF | 优先返回 X-Real-IP | PASS |
+| T-08 | 非受信来源用 socket 地址 | 公网对端的伪造头被忽略 | PASS |
+| T-09 | XFF 全非法时回落 socket 地址 | `garbage, , !!!` → socket 地址 | PASS |
+| T-10 | `trustProxy=false` 不读代理头 | 返回 socket 地址 | PASS |
+| T-11 | IPv6 应拒前缀（13 个） | `2002:7f00:1::`、`2001:0:…`、`64:ff9b::7f00:1`、`::127.0.0.1`、`::10.0.0.1`、`::a00:1`、`::ffff:127.0.0.1` 等 | PASS |
+| T-12 | 公网 IPv6 不误伤（4 个） | `2606:4700:4700::1111`、`2001:4860:4860::8888`、`::ffff:8.8.8.8` 等 | PASS |
+
+### 3.3 SEC-N01 回归套件（同文件，4/4 通过）
+
+| 编号 | 用例 | 断言 | 结果 |
+| --- | --- | --- | --- |
+| T-15 | `isSafeKey` 边界 | 合法键放行；空格/CR/LF/NUL/TAB/超长/非字符串拒绝 | PASS |
+| T-16 | 不安全键不发网络命令 | `get` 判 miss、`set` 拒绝，且不触发降级冷却（证明连 socket 都未建立） | PASS |
+| T-17 | 恶意短码不读不写缓存 | 5 类恶意码全部直查数据库；正常码仍走缓存；**缓存层收到的每个键都匹配 `^url:[0-9A-Za-z]{1,64}$`** | PASS |
+| T-18 | 端到端注入失效 | 真实 HTTP 服务 + 记录型缓存：注入三类载荷后既有短链 302 原地址、缓存键零污染 | PASS |
+
+### 3.4 常规安全验证（`verify-core.mjs`，53/55 通过，2 项为测试脚本自身预期错误，复核后确认行为正确）
+
+| 编号 | 类别 | 结果 |
 | --- | --- | --- |
-| `/../.env` | **200，88 字节，输出 `APP_ENV=localAPP_DEBUG=true...`** | 404，21 字节，泄露 0 |
-| `/%2e%2e/.env` | **200，88 字节，同上** | 404，泄露 0 |
-| `/..%2f.env` | **200，88 字节，同上** | 404，泄露 0 |
-| `/../backend/storage/short-url.sqlite3` | **200，65536 字节，`SQLite format 3...`** | 404，泄露 0 |
-| `/../package.json` | **200，507 字节** | 404，泄露 0 |
-| `/../backend/composer.lock` | **200，164032 字节** | 404，泄露 0 |
-| `/../backend/app/Services/AuthService.php` | **200，6535 字节，`<?php declare(strict_types=1);...`** | 404，泄露 0 |
-| `/../.git/config` | **200，309 字节** | 404，泄露 0 |
-| `/../.gitignore` | **200，615 字节** | 404，泄露 0 |
-
-功能回归（修复后静态资源仍正常）：
-
-```text
-/manifest.json  -> 200
-/robots.txt     -> 200
-/favicon.svg    -> 200
-/assets/*.js    -> 200（浏览器实测正常加载）
-```
-
-代码级证明（`Request` 层）：
-
-```text
-修复前：fromGlobals() clientIp() = '203.0.113.7' → withParams() clientIp() = ''
-修复后：fromGlobals() clientIp() = '203.0.113.7' → withParams() clientIp() = '203.0.113.7'
-```
-
-### 3.2 SEC-002 客户端 IP 丢失
-
-**登录限流**（连续 6 次错误密码）：
-
-| 次序 | 修复前 | 修复后 |
-| --- | --- | --- |
-| 1-5 | 401 | 401 |
-| 6 | 429 | 429 |
-
-限流桶落库值：
-
-```text
-修复前： {"ip_hash":"anonymous","fails":5}
-修复后： throttle ip_hash=e41656c742b4f87c4990e0cc fails=5   （真实 IP 哈希）
-```
-
-**代理头伪造测试**（每次请求换一个 `X-Forwarded-For`）：
-
-```bash
-for i in 1 2 3 4 5 6; do
-  curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'Content-Type: application/json' \
-    -H "X-Forwarded-For: 10.0.0.$i" -H "X-Real-IP: 10.0.0.$i" \
-    -d '{"username":"admin","password":"bad"}' "$B/api/auth/login"
-done
-# => 401 401 401 401 401 429    （换 XFF 无法绕过：IP 只取 REMOTE_ADDR）
-```
-
-**独立访客统计**（跳转记录的 `ip_hash`）：
-
-```text
-修复前： {"code":"w","ip_hash":null}          → visitors 恒为 0
-修复后： {"code":"S","ip_hash":"e41656c742b4f87c4990e0cc"}   → visitors 正常
-```
-
-### 3.3 SEC-003 CSRF
-
-```bash
-# 已登录（Cookie 有效），模拟跨站表单提交
-curl -b cookie.txt -X POST -H 'Content-Type: text/plain' \
-     -H 'Origin: https://evil.example' --data-binary '{"name":"csrf-form"}' \
-     "$B/api/admin/keys"
-```
-
-| 场景 | 修复前 | 修复后 |
-| --- | --- | --- |
-| 跨站 `Origin` + JSON | **200，Key 被创建** | 403 `Cross-site request rejected` |
-| 跨站 `Origin` + `text/plain`（简单表单） | **200，Key 被创建** | 403 |
-| 跨站 `Referer`（无 Origin） | 200 | 403 |
-| 无 `Origin`/`Referer` + Cookie | 200 | 403 `Missing Origin or Referer header` |
-| `Origin: null` | 200 | 403 |
-| 跨站 DELETE 短链 | 200 | 403 |
-| 同源 `Origin` + Cookie（正常前端） | 200 | 200（功能不受影响） |
-| 同源 PUT 设置 | 200 | 200 |
-| **`X-API-Key` 无 Origin（脚本客户端）** | 200 | **200（凭据头例外）** |
-| **`Bearer` 无 Origin（脚本客户端）** | 200 | **200（凭据头例外）** |
-| 错误 Key 无 Origin | 401 | 401（鉴权先于来源判定） |
-| 无 Key + 跨站 Origin | 200+401 | 403 |
-
-修复后数据库中 API Key 条数：仅 `legit`（同源创建），全部跨站尝试均未落库。
-
-**浏览器实测**（真实环境，非构造请求）：
-
-```text
-页面内 fetch('/url', {method:'POST', ...})           -> 200 {"url":"...","code":"C"}
-   （浏览器自动附带 Origin: http://127.0.0.1:3121 → 判定同源 → 放行）
-首页表单填写 + 回车提交                              -> 结果卡片正常显示
-   （短链接：http://127.0.0.1:3121/K，原链接与二维码正常）
-管理后台登录 → 概览/列表/统计渲染正常
-```
-
-### 3.4 SEC-004 体积上限
-
-| Payload | 修复前 | 修复后 |
-| --- | --- | --- |
-| URL 1024 字节 | 200 | 200 |
-| URL 2048 字节 | 200 | **200（边界值仍可用）** |
-| URL 4096 字节 | **200，入库** | **413 Payload Too Large** |
-| URL 102400 字节 | **200，入库** | 413 |
-| URL 1048576 字节（1MB） | **200，耗时 1.102s，库文件 64KB→1.2MB** | 413 |
-| 请求体 2MB 垃圾 | 400（耗时 1.155s） | 413 |
-
-超限 URL 未入库断言（单元测试 `testOversizedUrlIsRejectedEvenUnderBodyLimit`）：
-`assertSame([], $this->urls->map)`。
-
-### 3.5 SEC-005 部署包自检页
-
-| 请求 | 修复前 | 修复后 |
-| --- | --- | --- |
-| `GET /check.php` | **200，8086 字节，显示 `PHP 8.2.34`/`已加载`/`可写`/`存在`/`连接正常`** | **403 `Forbidden`** |
-| `GET /check.php?token=deadbeef` | — | 403 |
-| `GET /check.php?token=<正确令牌>` | — | 200（可用） |
-| 连续 3 次带令牌访问 | **`short_urls` 2 → 4（每次 +1，探针残留）** | **`short_urls` 0 → 0（不写入）** |
-| `GET /check.php?token=<令牌>&run=1` | — | 200，提示「探针短链已清理，未残留数据」，行数仍为 0 |
-| 页面中的文件系统路径/配置值匹配数 | 有（路径、扩展、状态） | **0** |
-
-### 3.6 SEC-006 安全响应头与 CSP
-
-```bash
-curl -s -D - -o /dev/null "$B/admin"
-```
-
-修复后实际响应头：
-
-```http
-x-content-type-options: nosniff
-x-frame-options: DENY
-referrer-policy: strict-origin-when-cross-origin
-permissions-policy: geolocation=(), microphone=(), camera=(), payment=()
-content-security-policy: default-src 'self';
-  script-src 'self' 'sha256-JS8WnjBrSLDNgx1F24d3bkiyA+wUr+5X9/dVsZOGmgg='
-  'sha256-wrNlu4oLmJobRzDk9UObxfmE275xTC+oALhpk779qaE='
-  https://www.googletagmanager.com;
-  style-src 'self' 'unsafe-inline'; img-src 'self' data: https:;
-  font-src 'self' data:; connect-src 'self'; form-action 'self';
-  frame-ancestors 'none'; base-uri 'self'; object-src 'none'
-```
-
-`X-Powered-By`：修复前每个响应均有 `X-Powered-By: PHP/8.2.34`；修复后匹配数为 **0**。
-
-HSTS 条件化：
-
-```text
-GET /api/auth/me                          -> 无 Strict-Transport-Security（HTTP，正确不下发）
-GET /api/auth/me + X-Forwarded-Proto: https -> 按 HSTS_MAX_AGE 下发
-```
-
-**CSP 哈希与构建产物一致性校验**：CSP 中两个 sha256 与 `dist/index.html` 中两段内联脚本
-（首帧主题脚本、Google Analytics 引导脚本）逐字节一致；外部脚本
-（`/assets/index-ClR0qPvO.js`、`googletagmanager.com`）由 `'self'` 与白名单放行。
-
-**真实浏览器验证（关键，避免「CSP 打断 SPA」这类不可见回归）**：
-
-| 验证项 | 结果 |
-| --- | --- |
-| 首页 SPA 挂载 | `#app` 有子节点，Vue 正常渲染 |
-| 样式应用 | `document.body` 背景色 = `rgb(13, 17, 23)`（Tailwind + 内联样式生效，未被 `style-src` 拦截） |
-| 主题脚本 | `document.documentElement.dataset.theme = "dark"`（内联脚本按哈希放行，未拦截） |
-| 页面内 API 调用 | `fetch('/url')` → 200，短链创建成功 |
-| 表单交互 | 填写网址 + 回车 → 结果卡片显示短链接、原链接、二维码 |
-| 管理后台 | 登录后概览卡片、14 天趋势、短链表格、分页、选项卡全部渲染正常 |
-| 控制台错误 | 无 CSP 违规 / 无脚本错误（`window.onerror` 与 `unhandledrejection` 监听结果为空） |
-
-### 3.7 SEC-010 创建限流
-
-```bash
-for i in $(seq 1 65); do
-  curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'Content-Type: application/json' \
-    -H "Origin: $B" -d "{\"url\":\"https://example.com/rl-$i\"}" "$B/url"
-done | sort | uniq -c
-```
-
-| 场景 | 修复前 | 修复后（默认 60/60s） |
-| --- | --- | --- |
-| 65 次连续创建 | **65 × 200** | **56 × 200，9 × 429**（第 61 次起限流） |
-| 不同 IP 是否共享配额 | — | 不共享（单元测试覆盖） |
-| 开放 API 是否受限 | 不限 | 受限（单元测试 `testOpenApiIsRateLimitedToo`） |
-
-并发下计数不丢失：10 次并发错误登录 → 5×401 + 5×429，`auth_throttle.fails = 5`（无丢失更新）。
-
-### 3.8 SEC-007 会话 Cookie
-
-```bash
-# HTTPS 反代场景
-curl -D - -o /dev/null -X POST -H 'Content-Type: application/json' \
-  -H "Origin: $B" -H 'X-Forwarded-Proto: https' \
-  -d '{"username":"admin","password":"secret123"}' "$B/api/auth/login"
-```
-
-| 场景 | 修复前 | 修复后 |
-| --- | --- | --- |
-| `HttpOnly` | 有 | 有 |
-| `SameSite=Strict` | 有 | 有 |
-| `Path=/` | 有 | 有 |
-| `Secure`（HTTP 请求） | 无 | 无（本地开发正确） |
-| `Secure`（`X-Forwarded-Proto: https`） | **取决于 `APP_URL`** | **有 `; Secure`** |
-
-**会话失效链路**（均实测通过）：
-
-| 测试 | 结果 |
-| --- | --- |
-| 登出后旧 Cookie | `/api/auth/me` → `{"authenticated":false}` |
-| 改密码后**全部**会话失效 | 两个独立会话均 `{"authenticated":false}` |
-| 改密码后旧密码登录 | 401 |
-| 改密码后新密码登录 | 200 |
-| 弱密码（< 8 位） | 400「新密码至少需要 8 位」 |
-| 当前密码错误 | 401「当前密码不正确」 |
-| 密码哈希落库 | `$2y$10$ykK...`（bcrypt，非明文/非 MD5/SHA1） |
-
-### 3.9 API Key 安全
-
-| 测试 | 结果 |
-| --- | --- |
-| 无 Key | 401 `Invalid API Key` |
-| 错误 Key | 401 |
-| `Authorization: Bearer` 有效 | 200 |
-| `X-API-Key` 有效 | 200 |
-| `Bearer` 小写变体 | 200 |
-| `Basic` 方案 | 401 |
-| `Bearer`（无值）/ 空白 | 401 |
-| 100KB 超长 Key 头 | 401（无崩溃） |
-| Key 含 CRLF 注入尝试 | 401 |
-| 重置后旧 Key | 401（立即失效） |
-| 重置后新 Key | 200 |
-| 删除后 Key | 401（立即失效） |
-| 数据库中存储 | `key_hash` = 64 位十六进制（sha256），**无明文** |
-| 列表输出 | 仅 `devr_` + 7 位十六进制前缀 |
-
-### 3.10 其余审计面实测
-
-**SQL 注入**（已认证，搜索参数）：
-
-| Payload | 结果 |
-| --- | --- |
-| `' OR 1=1 --` | 200，`total:0`（按字面量匹配，无注入） |
-| `%' UNION SELECT 1,2,3 --` | 200，无注入 |
-| `'; DROP TABLE short_urls;--` | 200，表仍存在（`SELECT COUNT(*)` 正常） |
-| `_` / `%` | 200（通配符已转义为字面量） |
-
-短码查询注入：`GET /'%20OR%20'1'%3D'1` → 404（绑定参数，无注入）。
-表完整性复核：`short_urls` 行数正常，无表被删除。
-
-**开放重定向 / 危险 scheme**（输入校验）：
-
-| Payload | 结果 |
-| --- | --- |
-| `javascript:alert(1)` | 400 |
-| `data:text/html,<script>alert(1)</script>` | 400 |
-| `file:///etc/passwd` | 400 |
-| `ftp://x.com` | 400 |
-| `//evil.com`（协议相对） | 400 |
-| `http://`（无主机） | 400 |
-| `https://example.com/%0d%0aSet-Cookie:injected=1` | 200（作为路径字符原样存储，**响应头未被注入**；跳转响应仅有 `location: https://example.com/%0d%0aSet-Cookie:injected=1`） |
-
-**存储型 XSS 载体**（前端渲染验证）：
-
-| 载体 | 后端行为 | 前端行为 |
-| --- | --- | --- |
-| URL = `https://example.com/<script>alert(1)</script>` | 200（作为路径字符） | Vue 文本插值转义，不执行 |
-| API Key 名称 = `<script>alert(1)</script>` | 200（长度合规） | 文本插值转义，不执行 |
-| 短码 = `<img src=x onerror=alert(1)>` | 400「短码只能包含 1-32 位英文字母或数字」 | — |
-| Referer = `https://evil.com/<script>alert(1)</script>` | 入库 `referer_host = 'evil.com'`（`referer` 现为 NULL） | 文本插值转义 |
-
-全项目 `grep -rn "v-html" src/` → 无匹配；无 `innerHTML`/`eval`/`document.write`。
-
-**路径穿越（第八类 payload）**：见 §3.1，全部 404。
-
-**错误信息泄露**：
-
-| 请求 | 结果 |
-| --- | --- |
-| 非法 JSON 体 | 400 `{"error":"Incorrect URL format"}`（无堆栈） |
-| 非法 HTTP 方法 | 405 `Method Not Allowed` + `Allow` 头 |
-| 多段路径 `/a/b/c/d` | 404 `Not Found` |
-| 不存在短码 | 404 `Unknown URL` |
-| 未登录管理接口 | 401 `Unauthorized` |
-| `per_page=100000`（越界） | 200，被夹到 100 |
-| `page=999999999999999999` | 200，空结果（无崩溃） |
-| `per_page=abc`（非数字） | 200，降级为默认值 |
-| 5000 / 8000 字符短码路径 | 404（无崩溃） |
-
-所有错误响应体均不含文件路径、SQL、堆栈、PHP 版本（`grep` 校验通过）。
-
-**并发与竞态**：
-
-| 场景 | 并发数 | 结果 |
-| --- | --- | --- |
-| 短链创建 | 10 | 10 个唯一短码，0 错误 |
-| 短链创建 | 50 | 50 个唯一短码，0 错误 |
-| 短链创建 | 100 | 100 个唯一短码，0 错误 |
-| 并发错误登录 | 10 | 5×401 + 5×429，`fails=5`（计数无丢失） |
-
-**日志安全**：`backend/storage/logs/*.log` 中检索
-`password|token|bearer|authorization|cookie|api_key|secret`，
-唯一匹配为固定消息 `"admin password changed"`（不含任何值）；日志不含完整 IP
-（仅有匿名哈希）、不含 Cookie、不含 Authorization 头。
-
-**业务逻辑**（既有功能回归，未因修复破坏）：
-
-| 测试 | 结果 |
-| --- | --- |
-| 创建 → 跳转 | 200 / 302 正确 |
-| 修改短码后 `/old` | 404（失效） |
-| 修改短码后 `/new` | 302（生效），统计随迁 |
-| 删除短链后跳转 | 404，点击记录按设计级联清除 |
-| `require_login=true` 时未登录创建 | 401（`/url` 与 `/api/url`） |
-| `require_login=true` 时管理员创建 | 200 |
-| `require_login` 不影响开放 API | 200（带 Key） |
-| 保留短码 `admin` | 400（不可占用） |
-
-**隐私**（修复后）：
-
-```text
-Referer: https://mail.example.com/inbox?token=SECRET-XYZ123
-→ referer      = NULL              （不再留存完整来源 URL）
-→ referer_host = 'mail.example.com'（来源域名统计不受影响）
-→ ip_hash      = 'e41656c742b4f87c4990e0cc'（HMAC，密钥不落库）
-→ device       = 'desktop'
-```
-
-IP 哈希算法对比（`IP_HASH_SECRET` 设置前后）：
-
-```text
-no secret (salt-based): 291bb9397b36eb6ac9e39f55
-with secret (HMAC):     c9e24c9357b756412ab0947a
-differ: yes   stable: yes
-```
-
----
-
-## 4. 回归测试清单
-
-新增 `backend/tests/Security/SecurityTest.php`（60 用例 / 121 断言），
-把审计确认的每个问题固化为断言，防止回归。
-
-| 覆盖点 | 用例 |
-| --- | --- |
-| 未登录访问全部管理接口（12 个 endpoint 逐一） | `testAdminEndpointsRejectAnonymous` |
-| 伪造 Cookie | `testForgedCookieIsRejected` |
-| 跨站写操作（Origin） | `testCrossSiteWriteIsRejected` |
-| 缺失 Origin/Referer | `testWriteWithoutOriginOrRefererIsRejectedByDefault` |
-| 同源写操作放行 | `testSameOriginWriteIsAllowed` |
-| 仅 Referer 同源 | `testRefererWithoutOriginIsAcceptedWhenSameOrigin` |
-| 跨站 Referer | `testCrossSiteRefererIsRejected` |
-| `Origin: null` | `testNullOriginIsRejected` |
-| 公开创建接口同源要求 | `testPublicCreationRequiresSameOriginToo` |
-| GET 不受来源校验影响 | `testGetRequestIsNotBlockedByCsrfGuard` |
-| **API Key 脚本客户端豁免来源校验** | `testApiKeyRequestWithoutOriginIsNotBlockedByCsrfGuard` |
-| **Bearer 脚本客户端豁免** | `testBearerKeyWithoutOriginIsNotBlockedByCsrfGuard` |
-| **豁免不削弱 Cookie 流程** | `testExplicitCredentialExemptionDoesNotWeakenCookieFlow` |
-| **公开接口无凭据不得豁免** | `testPublicCreationWithoutOriginStillRejected` |
-| 请求体超限 → 413 | `testOversizedRequestBodyIsRejected` |
-| URL 超限 → 413 且不入库 | `testOversizedUrlIsRejectedEvenUnderBodyLimit` |
-| URL 边界值可用 | `testMaxLengthUrlIsAccepted` |
-| 创建限流 | `testCreationIsRateLimitedPerIp` |
-| **限流按 IP 分桶（不共享）** | `testRateLimitUsesClientIpNotSharedBucket` |
-| 开放 API 同样限流 | `testOpenApiIsRateLimitedToo` |
-| **客户端 IP 路由注入后保留** | `testClientIpSurvivesRouteParameterInjection` |
-| **跳转 ip_hash 非空（UV 统计）** | `testRedirectRecordingKeepsIpHashWhenIpKnown` |
-| 安全响应头（成功响应） | `testSecurityHeadersArePresentOnApiResponses` |
-| 安全响应头（错误响应） | `testSecurityHeadersArePresentOnErrorResponses` |
-| HTTP 不下发 HSTS | `testHstsIsNotSentForPlainHttp` |
-| CSP 内联哈希（HTML 响应） | `testCspAllowsInlineScriptsByHashForHtmlResponses` |
-| CSP 哈希忽略外链脚本 | `testInlineScriptHashIgnoresExternalScripts` |
-| 恶意 URL（9 种 payload 参数化） | `testMaliciousUrlsAreRejectedOrEncoded` |
-| Location 头注入防护 | `testRedirectLocationNeverAllowsHeaderInjection` |
-| CRLF URL 不可入库 | `testUrlWithControlCharactersCannotBeStored` |
-| 保留短码 / 非法短码 | `testReservedAndInvalidShortCodesAreRejected` |
-| 超长短码 | `testShortCodeLongerThanLimitIsRejected` |
-| **API Key 仅存哈希** | `testApiKeyIsStoredAsHashOnly` |
-| Key 重置即时失效 | `testResetInvalidatesOldKeyImmediately` |
-| Key 删除即时失效 | `testDeletedKeyStopsWorking` |
-| Cookie 加固属性 | `testSessionCookieIsHardened` |
-| HTTPS 反代下 Secure | `testSessionCookieIsSecureBehindHttpsProxy` |
-| 改密撤销全部会话 | `testPasswordChangeRevokesEverySession` |
-| 弱密码拒绝 | `testWeakNewPasswordIsRejected` |
-| 当前密码校验 | `testWrongCurrentPasswordIsRejected` |
-| **完整 Referer 默认不落库** | `testFullRefererIsNotPersistedByDefault` |
-
----
-
-## 5. 最终状态
-
-### 5.1 工具链
+| V-01~V-14 | 14 个管理接口未登录（含 scan / cleanup×3） | **全部 401** |
+| V-15 | 伪造 Cookie（64 位随机串） | 401 |
+| V-16~V-19 | CSRF：跨站 Origin / 无来源 / 跨站 Referer / text/plain 简单表单 | **全部 403** |
+| V-20 | CSRF：同源创建 | 200 |
+| V-21 | CSRF：API Key 头豁免（跨站 Origin + 有效 Bearer） | 200（设计行为） |
+| V-22 | 4096 字节 URL | 413 |
+| V-23 | 20KB 请求体 | 413 |
+| V-24~V-28 | `javascript:` / `data:` / `file:` / 协议相对 / 含空白 URL | **全部 400** |
+| V-29 | URL 含编码 `%0d%0a` | 200 存为字面字符；跳转响应**无注入头**（无 set-cookie）※1 |
+| V-30 | URL 含原始 CR/LF | 400（既有套件另覆盖「库内脏数据时 500 而非注入头」） |
+| V-31~V-35 | 静态穿越 `../.env`、`%2e%2e`、源码、SQLite、二次编码 | 全部不泄露 |
+| V-36 | `/healthz` | 200 `{"ok":true,"links":N}`（Info，文档化契约） |
+| V-37~V-46 | 登录/会话：错误密码 401；Cookie HttpOnly+SameSite=Strict；token 64 位十六进制；**改密后两设备会话均失效**；新密码可登录 | 全部通过 |
+| V-47~V-54 | API Key：明文单次返回；列表无明文；无 Key 401※2；错 Key 401；**重置/删除后旧 Key 立即 401** | 全部通过 |
+| V-55~V-57 | 代理头：X-Real-IP 采纳、XFF 首项采纳（修复前行为，即 SEC-N02 证据） | 记录为发现 |
+| V-58 | 创建限流 | 阈值后 429 |
+
+※1 初次判 FAIL 系脚本预期写严（要求 400）；复核确认编码 CRLF 按字面存储、无头部注入，行为安全。
+※2 初次判 FAIL 系脚本未带 Origin 被 CSRF 403 先挡；带同源 Origin 复测为 401，行为正确。
+
+### 3.5 自动化套件
 
 | 命令 | 结果 |
 | --- | --- |
-| `composer test`（phpunit） | **OK（172 tests, 479 assertions）** |
-| `composer analyse`（phpstan level 8） | **No errors** |
-| `composer lint`（php-cs-fixer dry-run） | **0 files to fix（73 files scanned）** |
-| `composer audit`（运行时依赖） | **0 个运行时依赖，无适用漏洞** |
-| `npm audit` | 7 项告警，全部构建期工具链（见下方可达性分析） |
-| `npm audit --omit=dev` | **found 0 vulnerabilities** |
-| `npm run build` | **成功**（189.50 kB JS / 21.68 kB CSS，无 source map） |
+| `npm test`（backend，修复后） | **tests 109 / suites 23 / pass 109 / fail 0**（第一轮基线 97 + 本轮新增 12） |
+| `npm audit`（backend） | 0 vulnerabilities |
+| `npm audit --omit=dev`（根） | 0 vulnerabilities |
 
-### 5.2 依赖告警可达性判定（不只看 CVE 数量）
+---
 
-| 包 | 等级 | 位置 | 是否影响本项目 |
-| --- | --- | --- | --- |
-| `braces`（嵌套模式栈耗尽 DoS） | High | `tailwindcss → chokidar/micromatch → braces` | 否。仅构建期 watch/glob 使用，运行时产物不包含；`dist/assets/*.js` 中匹配数为 0 |
-| `chokidar` | High | 同上 | 否，同上 |
-| `micromatch` / `fast-glob` | High | `tailwindcss → 同上` | 否，同上 |
-| `postcss-selector-parser`（选择器解析 CPU 耗尽） | Moderate | `tailwindcss → postcss-nested → ...` | 否。仅在 `npm run build` 处理本项目自有 CSS 时使用，不处理不可信输入 |
-| 其余 2 项 | Moderate | 同上传递链 | 否，同上 |
+## 4. 回归测试清单（本轮新增固化）
 
-处理结论：**不升级**。修复方案要求 `tailwindcss@4`（破坏性大版本升级），
-而告警均在构建期工具链且产物零命中；为消除不可达告警而引入样式系统重构风险不划算。
-该判定已在审计报告中记录为 SEC-012（Info）。
+`backend/tests/cache-security.test.js`：
 
-### 5.3 未验证项（如实标注）
+| 覆盖点 | 用例 |
+| --- | --- |
+| `MemcachedStore.isSafeKey` 边界（空格/CR/LF/NUL/TAB/超长/非字符串/合法键） | T-15 |
+| 不安全键不发起网络命令（get 判 miss / set 拒绝 / 不触发降级） | T-16 |
+| 恶意短码绕过缓存直查库；缓存键形态全量断言 | T-17 |
+| 端到端：三类注入载荷 + 既有短链不受影响 + 缓存零污染 | T-18 |
+| XFF 解析方向 ×6（右起取值 / 伪造免疫 / X-Real-IP 优先 / 公网直连 / 全非法 / trustProxy=false） | T-05~T-10 |
+| IPv6 应拒前缀 ×13 / 公网不误伤 ×4 | T-11~T-12 |
+
+---
+
+## 5. 未执行项（如实标注，不得视为通过）
 
 | 项 | 状态 | 原因 |
 | --- | --- | --- |
-| Docker 镜像构建与容器内运行 | **Potential（未验证）** | 本机无 Docker 环境。Dockerfile / compose 的加固为静态审阅结论（SEC-015、SEC-016） |
-| Nginx 实际生效验证 | **Potential（未验证）** | 本机无 Nginx。三个配置文件为参考模板，加固规则为静态审阅结论（SEC-008、SEC-014） |
-| 宝塔面板真实部署 | 未执行 | 无宝塔环境；宝塔包行为已通过 PHP 内置服务器实测（含自检页令牌、路径穿越、路由） |
-| 大规模压力测试 | **未执行（有意）** | 按审计规则不做不可控压力测试；仅做小规模并发（10/50/100）验证正确性 |
-| IPv6 真实链路 | 未执行 | 限流/哈希按 `REMOTE_ADDR` 处理，逻辑上天然支持；仅用 `[::1]` 做单元级验证 |
+| 真实 memcached 注入复现 | 未执行 | 本机无 memcached 服务；以同协议 mock 等价验证，防护点在客户端拼接层与服务端实现无关 |
+| Docker 镜像构建 / 容器内运行 | 未执行 | 本机无 Docker |
+| Nginx 实际生效验证 | 未执行 | 本机无 Nginx；三份配置静态审阅（均含敏感路径拒绝与 X-Real-IP 覆盖） |
+| IPv6 真实链路 / NAT64 路由探测 | 未执行 | 本机无对应路由环境 |
+| 浏览器实测 `\` 归一化跳转 | 未执行 | 依据 WHATWG URL 规范（浏览器统一把特殊 scheme 中的 `\` 当 `/`）；服务端已以 Location 头取证 |
+| 压力测试 | 有意未做 | 审计规则禁止不可控压测 |
 
 ---
 
@@ -556,43 +138,37 @@ differ: yes   stable: yes
 
 ```text
 ==============================
-Security Audit & Fix Complete
+Short URL Security Audit Summary（第二轮 · Node.js）
 ==============================
 
-审计结果（修复前）
-  Critical: 0
-  High:     2
-  Medium:   5
-  Low:      4
-  Info:     5（4 项已修复 + 1 项判定无需修复）
+Confirmed Critical: 0
+Confirmed High:     1   （SEC-N01 memcached 注入 → 缓存投毒）
+Confirmed Medium:   0
+Confirmed Low:      2   （SEC-N02 XFF 首项；SEC-N03 IPv6 前缀）
+Informational:      4   （healthz 总数 / creator 隐私 / 默认口令 / 198.18.0.0/15）
 
-修复结果
-  Fixed:     15（2 High + 5 Medium + 4 Low + 4 Info）
-  Remaining: 0 个安全问题
-  非漏洞项:   6（SEC-017 ~ SEC-022 经实测判定为设计取舍/已验证通过）
-  Potential: 2（Docker / Nginx 运行验证，本机无对应环境，已如实标注）
+Fixed:             3   （1 High + 2 Low，全部含回归测试）
+Partially Fixed:   0
+Unfixed:           0
+Not Reproducible:  0
+Not Tested:        真实 memcached / Docker / Nginx / IPv6 链路（见 §5）
 
-回归验证
-  PHPUnit       172 tests / 479 assertions   通过
-  安全专项        60 tests / 121 assertions   通过
-  PHPStan L8      No errors                  通过
-  PHP-CS-Fixer    0 files to fix             通过
-  npm audit       prod: 0 vulnerabilities    通过
-  npm run build   成功                       通过
-  实际渗透复测     21 项检查全部 PASS          通过
-  浏览器 CSP 验证   首页 + 管理后台功能完整      通过
+Critical/High Blocking Issues:
+  （无）
 
-Security Score: 90 / 100
+Security Regression Tests:
+Passed:  backend 109/109（含新增 12）+ 攻击重放失效确认 + 常规验证 55 项复核
+Failed:  0
+Not Run: 见 §5 未执行项
 
-Production Ready: YES
-  （前提：修改默认密码 admin123、设置 IP_HASH_SECRET、确认 APP_DEBUG=false；
-    宝塔部署需删除 public/check.php 与 .check-token）
+Production Recommendation:
+- Ready
 
-Blocking Issues: 无
-  原 2 项 High（本地开发环境敏感文件读取、客户端 IP 丢失）与
-  5 项 Medium（CSRF、体积上限、自检页、安全响应头、创建限流）均已修复，
-  4 项 Low 与 4 项 Info 同步修复，全部通过实际 HTTP 验证与自动化回归测试。
-  1 项 Info（SEC-012 依赖告警）经可达性分析判定无需修复。
-  另有 6 项（SEC-017 ~ SEC-022）经实测判定为设计取舍或已验证通过，不计入漏洞。
+Remaining Risks:
+1. SEC-N08：私网/回环受信位置可伪造代理头（部署边界；保证 3001 不对公网开放即不受影响）
+2. SEC-N05：创建者原始 IP/UA 长期留存（功能设计；建议运营方评估留存期限）
+3. Docker / Nginx / 真实 memcached 环境未实测（静态审阅无发现，建议部署时按文档冒烟）
 ==============================
 ```
+
+**上线检查单**：① 修改默认密码（或设 `ADMIN_PASSWORD_HASH`）；② 设置 `IP_HASH_SECRET`；③ 确认 `APP_DEBUG=false`、`APP_ENV=production`；④ 使用 memcached 的部署包含本轮修复（SEC-N01）；⑤ HTTPS 站点设 `APP_URL` 与 `HSTS_MAX_AGE`；⑥ Node 端口仅监听内网/由 Nginx 独占代理。

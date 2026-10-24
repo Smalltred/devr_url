@@ -392,13 +392,13 @@ footer.end { margin-top: 50px; padding-top: 24px; border-top: 1px solid var(--li
   <div class="eyebrow">Security Audit · 已完成修复与回归验证</div>
   <h1>短链接系统 <span class="grad">安全审计报告</span></h1>
   <p class="lede">
-    对 PHP 8.2 + Vue 3 + SQLite 短链接服务的完整安全审计：源码审计 → 本地环境实际渗透验证 →
+    对 Node.js 24 + Vue 3 + SQLite 短链接服务（当前代码库）的完整安全审计：源码审计 → 隔离环境渗透验证 →
     代码级修复 → 自动化回归测试 → 再次实际验证。所有 High / Medium 结论均有真实 HTTP 请求证据，未使用"理论风险"充数。
   </p>
   <div class="meta-row">
     <span><b>项目</b> devr v0.3.0</span>
-    <span><b>技术栈</b> PHP 8.2 · SQLite · Vue 3 · Nginx · Docker</span>
-    <span><b>审计日期</b> 2026-10-06</span>
+    <span><b>技术栈</b> Node.js 24 · SQLite · Vue 3 · Nginx · Docker · Memcached</span>
+    <span><b>审计日期</b> 2026-10-24（第二轮 · Node.js 后端）</span>
     <span><b>风险等级</b> Good（良好）</span>
   </div>
 
@@ -406,7 +406,7 @@ footer.end { margin-top: 50px; padding-top: 24px; border-top: 1px solid var(--li
     <div class="vi">✅</div>
     <div>
       <h2>可以上线 · 无阻断项</h2>
-      <p>原 2 项 High、5 项 Medium、4 项 Low 问题已全部修复（共 15 条风险条目），并通过实际 HTTP 请求复测与 60 项自动化回归测试。上线前需完成 3 项配置（默认密码、IP 哈希密钥、确认关闭调试）。</p>
+      <p>1 项 High（memcached 注入 → 缓存投毒）与 2 项 Low 已全部修复，攻击重放确认失效，109 项测试全过。使用 memcached 的部署务必包含本轮修复。</p>
     </div>
   </div>
 </header>
@@ -416,29 +416,29 @@ footer.end { margin-top: 50px; padding-top: 24px; border-top: 1px solid var(--li
   <div class="sec-head">
     <span class="num">01</span>
     <h2>审计总览</h2>
-    <p>风险总览 16 条：2 High · 5 Medium · 4 Low · 5 Info（已修复 15 条，1 条判定无需修复）。另有 6 项经实测判定为非漏洞 / 设计取舍，不计入。</p>
+    <p>风险总览 8 条：1 High · 2 Low · 5 Info（已修复 3 条，5 条为文档化取舍）。14 项第一轮修复随迁移复核通过。</p>
   </div>
 
   <div class="grid g-4">
     <div class="card kpi">
-      <div class="k-label">确认风险条目</div>
-      <div class="k-value">16<small>项</small></div>
-      <div class="k-note">2 High · 5 Medium · 4 Low · 5 Info</div>
+      <div class="k-label">本轮确认条目</div>
+      <div class="k-value">8<small>项</small></div>
+      <div class="k-note">1 High · 2 Low · 5 Info（取舍）</div>
     </div>
     <div class="card kpi">
       <div class="k-label">已修复并验证</div>
-      <div class="k-value" style="color:var(--success)">15<small>项</small></div>
-      <div class="k-note">含 5 项 Medium · 全部实测复测通过</div>
+      <div class="k-value" style="color:var(--success)">3<small>项</small></div>
+      <div class="k-note">1 High + 2 Low · 攻击重放全部失效</div>
     </div>
     <div class="card kpi">
       <div class="k-label">自动化测试</div>
-      <div class="k-value">172<small>项</small></div>
-      <div class="k-note">479 断言 · 含 60 项新增安全测试</div>
+      <div class="k-value">109<small>项</small></div>
+      <div class="k-note">node --test · 含 12 项新增安全测试</div>
     </div>
     <div class="card kpi">
-      <div class="k-label">实测复测项</div>
-      <div class="k-value">21<small>项</small></div>
-      <div class="k-note">全部 PASS · 无回归</div>
+      <div class="k-label">常规验证断言</div>
+      <div class="k-value">55<small>项</small></div>
+      <div class="k-note">攻击重放 + 常规组合 · 无回归</div>
     </div>
   </div>
 
@@ -455,7 +455,7 @@ footer.end { margin-top: 50px; padding-top: 24px; border-top: 1px solid var(--li
             <circle class="seg" cx="60" cy="60" r="46" stroke="var(--info)"    pathLength="100" data-seg="info"></circle>
           </svg>
           <div class="ctr">
-            <div class="n">16</div>
+            <div class="n">8</div>
             <div class="d">风险条目</div>
           </div>
         </div>
@@ -518,14 +518,14 @@ footer.end { margin-top: 50px; padding-top: 24px; border-top: 1px solid var(--li
   <div class="sec-head">
     <span class="num">03</span>
     <h2>漏洞与修复明细</h2>
-    <p>共 16 条风险条目，点击展开详情（原因 / 修复方案 / 影响 / 兼容性）。下方 SEC-001 ~ SEC-016 为风险总览表全量；另有 6 项经实测判定为非漏洞，见 <a href="#na" style="color:var(--accent)">第 07 节</a>。</p>
+    <p>共 8 条风险条目（SEC-N01 ~ N08），点击展开详情。1 High + 2 Low 已修复；5 条为文档化取舍。第一轮修复项的复核结果见 <a href="#na" style="color:var(--accent)">第 07 节</a>。</p>
   </div>
 
   <div class="filters">
-    <button class="chip on" data-filter="all">风险条目 <span class="n">16</span></button>
-    <button class="chip" data-filter="high">High <span class="n">2</span></button>
-    <button class="chip" data-filter="medium">Medium <span class="n">5</span></button>
-    <button class="chip" data-filter="low">Low <span class="n">4</span></button>
+    <button class="chip on" data-filter="all">风险条目 <span class="n">8</span></button>
+    <button class="chip" data-filter="high">High <span class="n">1</span></button>
+    <button class="chip" data-filter="medium">Medium <span class="n">0</span></button>
+    <button class="chip" data-filter="low">Low <span class="n">2</span></button>
     <button class="chip" data-filter="info">Info <span class="n">5</span></button>
     <div class="search">
       <span>⌕</span>
@@ -541,40 +541,40 @@ footer.end { margin-top: 50px; padding-top: 24px; border-top: 1px solid var(--li
 <section id="evidence">
   <div class="sec-head">
     <span class="num">04</span>
-    <h2>修复前后实测对比</h2>
-    <p>左列为修复前的实际响应，右列为修复后。全部通过真实 HTTP 请求获取。</p>
+    <h2>修复前后实测对比（本轮）</h2>
+    <p>左列为修复前/攻击时实际响应，右列为修复后。全部来自隔离环境的真实 HTTP 请求。</p>
   </div>
 
   <div class="grid g-cmp">
     <div class="card span2">
-      <h3 style="margin:0 0 4px;font-size:15px">SEC-001 · 路径穿越（本地开发服务器）</h3>
+      <h3 style="margin:0 0 4px;font-size:15px">SEC-N01 · Memcached 注入 → 缓存投毒（本轮 High）</h3>
       <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">
-        修复前 <code>/../.env</code> 直接返回配置文件内容，数据库文件 64 KB 全量泄露。
+        一次未认证 GET 注入 <code>set</code> 命令：劫持既有短码 / 404 拒绝服务 / 凭空造钓鱼码。注入后等 31s 客户端冷却再断言。
       </p>
       <div class="compare" id="cmpTraversal"></div>
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 4px;font-size:15px">SEC-003 · CSRF 跨站写操作</h3>
-      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">跨站表单可创建 API Key、删除短链。</p>
+      <h3 style="margin:0 0 4px;font-size:15px">CSRF 来源校验（复核通过）</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">跨站写操作全部 403；带 API Key 头的脚本客户端按设计豁免。</p>
       <div class="compare" id="cmpCsrf"></div>
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 4px;font-size:15px">SEC-004 · 请求体与 URL 长度</h3>
-      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">1 MB URL 曾可入库，耗时 1.1 秒。</p>
+      <h3 style="margin:0 0 4px;font-size:15px">请求体与 URL 上限（复核通过）</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">超限请求在传输层即丢弃字节，内存与存储不受放大。</p>
       <div class="compare" id="cmpSize"></div>
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 4px;font-size:15px">SEC-002 · 客户端 IP 与限流</h3>
-      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">限流桶曾退化为常量 <code>anonymous</code>，全站共享。</p>
+      <h3 style="margin:0 0 4px;font-size:15px">SEC-N02 · XFF 解析方向</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">受信位置轮换伪造首项曾可绕过登录节流与创建限流。</p>
       <div class="compare" id="cmpIp"></div>
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 4px;font-size:15px">SEC-010 · 创建接口限流</h3>
-      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">65 次连续创建，默认 60 次/分钟/IP。</p>
+      <h3 style="margin:0 0 4px;font-size:15px">SEC-N03 · 外链探测 IPv6 目标</h3>
+      <p style="margin:0 0 14px;font-size:13px;color:var(--text-3)">6to4 / NAT64 / IPv4 兼容前缀可编码内网目标，已全部拒绝。</p>
       <div class="compare" id="cmpRate"></div>
     </div>
   </div>
@@ -685,26 +685,26 @@ content-security-policy: default-src 'self';
 
   <div class="grid g-2">
     <div class="card">
-      <h3 style="margin:0 0 12px;font-size:15px">Not Applicable（无此攻击面）</h3>
+      <h3 style="margin:0 0 12px;font-size:15px">Not Applicable（当前代码库无此攻击面）</h3>
       <div class="checks">
-        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>SSRF</b> · 后端从不请求用户提交的 URL，仅 <code>parse_url</code> 校验后落库并 302<br><span style="color:var(--text-3);font-size:12.5px">无预览、无标题抓取、无 URL 探测</span></span></div>
-        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>SQL 注入</b> · 全量 <code>PDO::prepare</code> + 绑定参数，LIKE 通配符显式转义<br><span style="color:var(--text-3);font-size:12.5px">实测 <code>' OR 1=1 --</code>、<code>'; DROP TABLE --</code>、<code>UNION SELECT</code> 均无效</span></span></div>
-        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>命令执行 / 任意文件写入</b> · 全项目无用户输入路径进入 <code>exec/system/eval/include</code></span></div>
+        <div class="chk"><span class="ic">i</span><span class="ct"><b>SSRF · 存在攻击面，防护复核通过</b> · 外链巡检会请求用户 URL<br><span style="color:var(--text-3);font-size:12.5px">http/https 白名单 · IPv4 全段拒绝 · IPv6 前缀本轮补齐 · DNS pinning 防重绑定 · 重定向逐跳重校验 · 只读响应头</span></span></div>
+        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>SQL 注入</b> · 全量参数化（node:sqlite prepare），LIKE 通配符显式转义<br><span style="color:var(--text-3);font-size:12.5px">实测 <code>' OR 1=1 --</code>、<code>'; DROP TABLE --</code>、<code>UNION SELECT</code> 均无效</span></span></div>
+        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>命令注入 / 原型污染</b> · 全库无 <code>eval</code>/<code>new Function</code>/<code>child_process</code>/动态 <code>require</code>；用户输入不参与对象合并</span></div>
         <div class="chk"><span class="ic">⊘</span><span class="ct"><b>IDOR</b> · 单管理员模型，所有管理接口作用于全站资源，无按用户划分的归属</span></div>
-        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>短链删除后数据残留</b> · 同一 <code>BEGIN IMMEDIATE</code> 事务内删除短链与全部点击记录</span></div>
-        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>容器逃逸类风险</b> · 无 privileged、无 host network/PID、未挂载 Docker Socket</span></div>
+        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>短链删除后数据残留</b> · 同一事务内级联删除点击记录，并主动失效缓存</span></div>
+        <div class="chk"><span class="ic">⊘</span><span class="ct"><b>容器逃逸类风险</b> · 无 privileged、无 host network/PID、未挂载 Docker Socket；app 端口未对宿主发布</span></div>
       </div>
     </div>
 
     <div class="card">
-      <h3 style="margin:0 0 12px;font-size:15px">设计取舍 / 已验证通过（非漏洞）</h3>
+      <h3 style="margin:0 0 12px;font-size:15px">第一轮修复随迁移保留 / 设计取舍</h3>
       <div class="checks">
         <div class="chk warn"><span class="ic">i</span><span class="ct"><b>顺序短码可枚举</b> · 与原 Node 版逐位兼容的既有产品行为<br><span style="color:var(--text-3);font-size:12.5px">后台可开启随机短码（最短 3 位，<code>random_int</code>）。短码是公开分享的跳转标识，非访问控制凭据</span></span></div>
         <div class="chk warn"><span class="ic">i</span><span class="ct"><b>开放重定向</b> · 302 跳转是产品核心功能<br><span style="color:var(--text-3);font-size:12.5px">已核实：仅接受 http/https；CRLF 不能注入 Location（实测仅有原始 location 头）</span></span></div>
         <div class="chk"><span class="ic">✓</span><span class="ct"><b>并发与碰撞</b> · 10 / 50 / 100 并发创建，<b>无重复短码、无错误</b><br><span style="color:var(--text-3);font-size:12.5px">计数器在 <code>BEGIN IMMEDIATE</code> 内自增，<code>code</code> 为主键</span></span></div>
         <div class="chk"><span class="ic">✓</span><span class="ct"><b>限流不可被代理头绕过</b> · 换 6 个不同 <code>X-Forwarded-For</code> 仍在第 6 次被 429</span></div>
         <div class="chk"><span class="ic">✓</span><span class="ct"><b>日志不含敏感值</b> · 检索 password/token/bearer/cookie/api_key 仅命中固定文案 <code>"admin password changed"</code></span></div>
-        <div class="chk"><span class="ic">✓</span><span class="ct"><b>存储型 XSS 不可行</b> · <code>src/</code> 无 <code>v-html</code>/<code>innerHTML</code>/<code>eval</code>；用户数据全部经 Vue 文本插值转义</span></div>
+        <div class="chk"><span class="ic">✓</span><span class="ct"><b>第一轮 check.php 自检页已随迁移移除</b>（改为 /healthz）；<b>存储型 XSS 不可行</b> · <code>src/</code> 无 <code>v-html</code>/<code>innerHTML</code>/<code>eval</code>；用户数据全部经 Vue 文本插值转义</span></div>
       </div>
     </div>
   </div>
@@ -722,6 +722,7 @@ content-security-policy: default-src 'self';
     <div class="card">
       <h3 style="margin:0 0 12px;font-size:15px">上线前必做（3 项）</h3>
       <div class="checks">
+        <div class="chk warn"><span class="ic">!</span><span class="ct"><b>使用 memcached 的部署务必包含本轮修复</b>（SEC-N01）<br><span style="color:var(--text-3);font-size:12.5px">docker-compose / 单容器 runtime 默认内置 memcached；CACHE_DRIVER=none 不受影响</span></span></div>
         <div class="chk warn"><span class="ic">!</span><span class="ct"><b>修改管理后台默认密码</b> <code>admin123</code><br><span style="color:var(--text-3);font-size:12.5px">推荐设置 <code>ADMIN_PASSWORD_HASH</code>，或登录后台「设置」页修改</span></span></div>
         <div class="chk warn"><span class="ic">!</span><span class="ct"><b>设置 <code>IP_HASH_SECRET</code></b><br><span style="color:var(--text-3);font-size:12.5px">如 <code>openssl rand -hex 32</code>；设置后 IP 改用 HMAC，数据库泄露也无法反推 IP</span></span></div>
         <div class="chk warn"><span class="ic">!</span><span class="ct"><b>确认 <code>APP_DEBUG=false</code>、<code>APP_ENV=production</code></b><br><span style="color:var(--text-3);font-size:12.5px">宝塔部署另需删除 <code>public/check.php</code> 与 <code>.check-token</code></span></span></div>
@@ -735,13 +736,13 @@ content-security-policy: default-src 'self';
     <div class="card">
       <h3 style="margin:0 0 12px;font-size:15px">未验证项（如实标注）</h3>
       <div class="checks">
-        <div class="chk warn"><span class="ic">?</span><span class="ct"><b>Docker 镜像构建与容器内运行</b> <span class="cv">Potential</span><br><span style="color:var(--text-3);font-size:12.5px">本机无 Docker 环境，加固为静态审阅结论（SEC-015 / SEC-016）</span></span></div>
-        <div class="chk warn"><span class="ic">?</span><span class="ct"><b>Nginx 实际生效验证</b> <span class="cv">Potential</span><br><span style="color:var(--text-3);font-size:12.5px">本机无 Nginx，三个配置文件为参考模板（SEC-008 / SEC-014）</span></span></div>
-        <div class="chk warn"><span class="ic">?</span><span class="ct"><b>宝塔面板真实部署</b> <span class="cv">未执行</span><br><span style="color:var(--text-3);font-size:12.5px">宝塔包行为已通过 PHP 内置服务器实测（令牌、路径穿越、路由）</span></span></div>
+        <div class="chk warn"><span class="ic">?</span><span class="ct"><b>Docker 镜像构建与容器内运行</b> <span class="cv">未执行</span><br><span style="color:var(--text-3);font-size:12.5px">本机无 Docker；compose / Dockerfile 为静态审阅（storage 预建并归属 node 用户、端口未发布、npm ci --omit=dev）</span></span></div>
+        <div class="chk warn"><span class="ic">?</span><span class="ct"><b>Nginx / 真实 memcached 实测</b> <span class="cv">未执行</span><br><span style="color:var(--text-3);font-size:12.5px">注入以同协议 mock 等价验证，防护点在客户端拼接层；三份 Nginx 配置静态审阅（均强制 X-Real-IP）</span></span></div>
+        <div class="chk warn"><span class="ic">?</span><span class="ct"><b>IPv6 真实链路 / NAT64 路由</b> <span class="cv">未执行</span><br><span style="color:var(--text-3);font-size:12.5px">本机无对应路由环境；以前缀判定单元测试覆盖（13 应拒 + 4 应放行）</span></span></div>
         <div class="chk warn"><span class="ic">?</span><span class="ct"><b>大规模压力测试</b> <span class="cv">有意未做</span><br><span style="color:var(--text-3);font-size:12.5px">按审计规则不做不可控压力测试；仅小规模并发验证正确性</span></span></div>
       </div>
       <div class="callout ok" style="margin-top:14px">
-        <b>真实数据库未被触碰。</b> 全部实测使用独立临时数据库；
+        <b>真实数据库与 3001 端口未被触碰。</b> 全部实测使用独立测试库与独立端口 3021/3022；
         项目自身的 <code>backend/storage/short-url.sqlite3</code> 未被修改或删除。
         另用其副本验证了旧库升级：新增表自动创建，15 行数据全部保留，无需手工迁移。
       </div>
@@ -754,21 +755,21 @@ content-security-policy: default-src 'self';
       <div class="phase"><div class="rail"><div class="dot">1</div><div class="line"></div></div>
         <div class="pc"><h3>攻击面建模与源码审计</h3><p>枚举 20 条路由、鉴权/授权、输入输出、文件操作、配置加载；逐项追踪数据流（Auth · CSRF · SQL · XSS · SSRF · 路径穿越 · 隐私 · 日志）</p></div></div>
       <div class="phase"><div class="rail"><div class="dot">2</div><div class="line"></div></div>
-        <div class="pc"><h3>本地环境实际渗透验证</h3><p>启动 PHP 8.2.34 + 独立测试库；对每个可疑点构造真实 HTTP 请求取证，确认 2 High / 5 Medium / 4 Low / 5 Info</p></div></div>
+        <div class="pc"><h3>本地环境实际渗透验证</h3><p>独立端口 3021/3022 + 独立测试库 + mock-memcached；对可疑点构造真实 HTTP 请求取证，确认 1 High / 2 Low</p></div></div>
       <div class="phase"><div class="rail"><div class="dot">3</div><div class="line"></div></div>
-        <div class="pc"><h3>代码级修复</h3><p>后端强制校验（不靠前端隐藏）、不关闭功能、不弱化策略；新增 Security 层（CsrfGuard / SecurityHeaders / RequestRateLimiter / DevStaticFile）</p></div></div>
+        <div class="pc"><h3>代码级修复</h3><p>双层防护（入口门禁 + 存储层校验）、不关闭功能、不弱化策略；改动仅限缓存键校验 / XFF 方向 / IPv6 前缀三处</p></div></div>
       <div class="phase"><div class="rail"><div class="dot">4</div><div class="line"></div></div>
-        <div class="pc"><h3>回归测试固化</h3><p>新增 <code>tests/Security/</code> 60 项断言，把每个已确认问题固化为可重复执行的测试</p></div></div>
+        <div class="pc"><h3>回归测试固化</h3><p>新增 <code>tests/cache-security.test.js</code> 12 项断言，把注入投毒 / XFF 方向 / IPv6 前缀固化为可重复测试</p></div></div>
       <div class="phase"><div class="rail"><div class="dot">5</div><div class="line"></div></div>
-        <div class="pc"><h3>全量质量门禁</h3><p>phpunit · phpstan L8 · php-cs-fixer · npm audit · npm run build 全部通过</p></div></div>
+        <div class="pc"><h3>全量质量门禁</h3><p>node --test 109 项全过 · 双侧 npm audit 0 漏洞</p></div></div>
       <div class="phase"><div class="rail"><div class="dot">6</div><div class="line"></div></div>
-        <div class="pc"><h3>再次验证与浏览器复核</h3><p>重放全部攻击 payload 确认失效；用真实浏览器确认 CSP 未打断 SPA、首页与后台功能完整</p></div></div>
+        <div class="pc"><h3>再次验证与浏览器复核</h3><p>重放三类注入攻击确认失效（既有短链始终 302 原地址、缓存零污染）；55 项常规断言复核无回归</p></div></div>
     </div>
   </div>
 </section>
 
 <footer class="end">
-  <div>devr v0.3.0 · 安全审计报告 · 2026-10-06</div>
+  <div>devr v0.3.0 · 安全审计报告（第二轮 · Node.js） · 2026-10-24</div>
   <div>配套文档：SECURITY-AUDIT.md · SECURITY-FIXES.md · SECURITY-TEST-REPORT.md</div>
 </footer>
 
@@ -784,202 +785,139 @@ const SEV_META = {
 };
 
 const FINDINGS = [
-  { id:'SEC-001', sev:'high', title:'本地开发服务器静态回退路径穿越', mod:'文件访问 / 部署', fixed:true,
-    why:'<code>backend/public/index.php</code> 在 <code>cli-server</code> 分支把请求路径只剔除反斜杠与 NUL 后与静态根目录字符串拼接：<code>$file = $staticRoot.$safePath</code>。<code>rawurldecode</code> 在路由之前执行，因此 <code>%2e%2e</code>、<code>..%2f</code> 等编码形式同样会被解开。项目根目录恰是静态根 <code>dist/</code> 的上级，于是 <code>/../.env</code>、<code>/../backend/storage/*.sqlite3</code> 全部可读。',
-    impact:'<b>机密性：高。</b> .env（含 ADMIN_PASSWORD）、SQLite 数据库（全部短链、点击记录、api_keys 哈希、登录 token 哈希）、后端源码、.git 完全泄露；凭据泄露即可直接接管管理后台。',
-    fix:'新增 <code>App\\Support\\DevStaticFile</code>：用 <code>realpath()</code> 归一化后强制校验结果位于允许根目录内部（含分隔符边界比较，避免 <code>/dist-evil</code> 绕过），并显式拒绝返回 <code>.php</code>（否则内置服务器会输出源码）。宝塔包同类分支同步修复。',
-    compat:'无。正常静态资源（/、/index.html、/assets/*、/favicon.svg、/manifest.json、/robots.txt）实测仍正常。',
-    code:'// 修复前\n$safePath = str_replace([\'\\\\\', "\\0"], \'\', $path);\n$file = $staticRoot.$safePath;   // /../.env 直接生效\nif (is_file($file)) { readfile($file); }\n\n// 修复后\n$file = DevStaticFile::resolve($path, [\n    dirname(__DIR__, 2).\'/dist\', dirname(__DIR__, 2).\'/public\'\n]);\nif ($file !== null) { /* realpath 归属校验已通过 */ }' },
+  { id:'SEC-N01', sev:'high', title:'Memcached 文本协议注入 → 任意短码缓存投毒', mod:'缓存 / 完整性', fixed:true,
+    why:'<code>GET /{code}</code> 把 <code>decodeURIComponent</code> 之后的路径段原样当短码，<code>CachedUrlRepository</code> 直接拼进缓存键，<code>MemcachedStore</code> 再把键拼进文本协议命令行——修复前 <code>#key()</code> 无任何校验。请求路径中百分号编码的 CRLF/空格/NUL 解码后成为协议控制字符，<b>一次未认证 GET 即可注入完整 set 命令</b>。',
+    impact:'<b>完整性：高。</b> 任意既有短码可被改指向攻击者站点（域内钓鱼）；可凭空铸造任意路径的钓鱼短码。<b>可用性：高。</b> 任意短码可被打成 404（负缓存标记 TTL 上限 30 天）。机密性低（注入第二条 get 可读其它缓存条目，本应用缓存值仅为公开 URL）。',
+    fix:'双层防护：① <code>findByCode</code> 短码不匹配 <code>^[0-9A-Za-z]{1,64}$</code> 时完全跳过缓存（不读不写，直查库）——用户路径的任意字节从入口进不了缓存键；② <code>MemcachedStore</code> 新增 <code>isSafeKey()</code>（可见 ASCII、无空白/控制字符、≤250 字节），get/set/delete 强制校验，不安全键判 miss 且<b>不发起任何网络命令</b>——存储层自身注入免疫。',
+    compat:'无。非法形态短码本就 404，行为不变；CACHE_DRIVER=none / NullStore 部署不受影响。',
+    code:'// 第一层：入口门禁（cachedUrlRepository.js）\nconst CACHEABLE_CODE = /^[0-9A-Za-z]{1,64}$/\n\nasync findByCode(code) {\n    if (!code) return null\n    if (!CACHEABLE_CODE.test(code)) {\n        // 扫描/攻击流量：直查数据库，不读也不写缓存\n        return this.inner.findByCode(code)\n    }\n    ...\n}\n\n// 第二层：存储层自免疫（memcachedStore.js）\nconst SAFE_KEY = /^[\x21-\x7e]{1,250}$/   // 可见 ASCII，无空白/控制字符\n\nasync get(key) {\n    if (!MemcachedStore.isSafeKey(this.#key(key))) return null  // 不发网络命令\n    ...\n}' },
 
-  { id:'SEC-002', sev:'high', title:'客户端 IP 在路由参数注入后丢失', mod:'认证 / 统计', fixed:true,
-    why:'<code>Router::dispatch()</code> 总是用 <code>$request->withParams($params)</code> 的返回值调用处理器，而 <code>withParams()</code> 只传递前 6 个构造参数，漏掉第 7 个 <code>$remoteAddress</code>，导致<b>所有</b>处理器拿到的 <code>clientIp()</code> 恒为空串。',
-    impact:'<b>可用性：高。</b> 登录限流回退为常量 <code>\'anonymous\'</code>，全站共享一个桶——任意单一来源即可把全部管理员锁在门外（而该桶无法区分攻击者）。同时点击统计的 <code>ip_hash</code> 恒为 <code>NULL</code>，独立访客用 <code>COUNT(DISTINCT ip_hash) WHERE ip_hash IS NOT NULL</code> 统计，结果恒为 0。',
-    fix:'<code>withParams()</code> 显式透传 <code>$this->remoteAddress</code>；并在安全套件中用带 IP 的请求固化「IP 在路由注入后仍然保留」与「跳转记录 ip_hash 非空」。',
-    compat:'无。测试助手同步补充了默认 Host/Origin 头（真实浏览器写请求必然携带），既有 112 个测试全部保持通过。',
-    code:'// 修复前\nreturn new self($this->method, $this->path, $this->rawBody,\n    $this->query, $this->headers, $params);\n\n// 修复后\nreturn new self($this->method, $this->path, $this->rawBody,\n    $this->query, $this->headers, $params,\n    $this->remoteAddress);   // 丢失它会让限流按空 IP 归并' },
+  { id:'SEC-N02', sev:'low', title:'X-Forwarded-For 取首项，受信位置可伪造限流键', mod:'限流 / IP 解析', fixed:true,
+    why:'<code>resolveClientIp</code> 在 X-Real-IP 缺失时回退解析 XFF 并取<b>第一个</b>有效条目。XFF 是追加语义（nginx <code>$proxy_add_x_forwarded_for</code>）：最左可被客户端伪造、最右由最近受信代理追加——取首项即信任了可伪造部分。',
+    impact:'位于私网/容器网/代理后的攻击者轮换伪造 IP 即可绕过登录节流（15 分钟 5 次）与创建限流（60 次/分钟）。公网直连不受影响；随附三份 Nginx 配置强制覆盖 X-Real-IP（后端优先读它），默认部署实际不可利用——故定 Low。',
+    fix:'XFF 改为<b>从右往左</b>取第一个有效条目（最近受信代理追加的最可信）；X-Real-IP 优先级与 trustProxy 语义不变。修复后 <code>"9.9.9.9, 203.0.113.10"</code> → <code>203.0.113.10</code>。',
+    compat:'无（仅内部 IP 解析）。' },
 
-  { id:'SEC-003', sev:'medium', title:'状态变更请求缺少来源校验（CSRF）', mod:'CSRF', fixed:true,
-    why:'登录态存于 Cookie（浏览器自动附带），全部写操作（改设置、改密码、增删短链、增删/重置 API Key）没有任何 CSRF Token 或 Origin/Referer 校验，唯一防线是 <code>SameSite=Strict</code>。该属性有效但不构成完整防护：旧浏览器与嵌入式 WebView 不识别它，站点若出现 <code>http://</code> 子域或同一站点的其它端口，"同站"判定也不覆盖。',
-    impact:'<b>完整性：中。</b> 管理员操作可被伪造（改设置、改密码、增删短链与 API Key），前提是管理员已登录并访问攻击者页面。',
-    fix:'新增 <code>App\\Security\\CsrfGuard</code>，在 <code>App::handle()</code> 中早于任何处理器执行：只校验非 GET/HEAD/OPTIONS；来源取 <code>Origin</code>（<code>null</code> 视为无效），缺失时取 <code>Referer</code> 的协议+主机；与请求 <code>Host</code> 比较判定同源（协议不参与比较，以适配内网 TLS 卸载）；支持 <code>ALLOWED_ORIGINS</code> 白名单。',
-    compat:'<b>有影响。</b> 用 curl/脚本调用公开创建接口（/url、/api/url）需补 Origin 头，或设 <code>CSRF_ALLOW_MISSING_ORIGIN=true</code>；开放 API 带 Key 调用不受影响；跨域部署需配 ALLOWED_ORIGINS。',
-    code:'// 关键设计：显式凭据头例外\n// CSRF 成立前提是「浏览器自动附带凭据」；自定义请求头只能由脚本显式设置，\n// 跨站表单无法添加，浏览器跨域设置自定义头会先触发预检（本服务不返回 CORS 允许头）。\nprivate function hasExplicitCredential(Request $request): bool\n{\n    $apiKey = $request->header(\'x-api-key\');\n    if (is_string($apiKey) && trim($apiKey) !== \'\') { return true; }\n    $auth = $request->header(\'authorization\');\n    return is_string($auth) && preg_match(\'/^Bearer\\s+\\S+/i\', $auth) === 1;\n}' },
-
-  { id:'SEC-004', sev:'medium', title:'请求体与目标 URL 长度无上限', mod:'输入验证 / DoS', fixed:true,
-    why:'<code>Request::fromGlobals()</code> 无条件把 <code>php://input</code> 全部读入内存并 <code>json_decode</code>；<code>UrlValidator</code> 只校验协议/主机/空白字符，不限制长度。短链库属长期存储，单条 1 MB URL 会被永久写入。',
-    impact:'<b>可用性：中。</b> 单请求内存与存储占用无上限；实测 1 MB URL 响应时间从 44 ms 升至 1.1 秒，库文件由 64 KB 增至 1.2 MB，且响应体回显整条 URL。持续提交可耗尽磁盘。',
-    fix:'新增 <code>PayloadTooLargeException</code> → 413。全局请求体上限 <code>MAX_BODY_BYTES</code>（默认 16384）在 <code>App::handle()</code> 最前置校验；<code>UrlValidator::MAX_LENGTH = 2048</code>，在归一化<b>前后各校验一次</b>（先按输入长度快速拒绝以避免对大字符串跑正则，归一化后长度可能因百分号编码变长）。',
-    compat:'有影响但范围合理。2048 字节覆盖主流浏览器实际可用范围，实测边界值 2048 仍返回 200；更长返回 413，可通过 MAX_BODY_BYTES 调整。',
-    code:'public const MAX_LENGTH = 2048;\n\nif (strlen($url) > self::MAX_LENGTH) {\n    throw new PayloadTooLargeException(\'URL exceeds \'.self::MAX_LENGTH.\' bytes\');\n}\n// ... 归一化后再校验实际入库长度\n$normalized = $this->normalize($url);\nif (strlen($normalized) > self::MAX_LENGTH) { /* 413 */ }' },
-
-  { id:'SEC-005', sev:'medium', title:'部署包自检页无鉴权且产生数据写入', mod:'信息泄露 / 部署', fixed:true,
-    why:'<code>deploy/baota/public/check.php</code> 面向公网开放且无需任何凭据，输出 PHP 版本、扩展加载情况、storage 可写性、数据库连接状态与"真实异常"信息（含路径细节）。更严重的是页面加载时会执行一次「创建短链 → 跳转」全链路，<b>每次访问都在真实数据库写入一条短链</b>。',
-    impact:'<b>机密性：中</b>（泄露服务器环境与部署细节，为后续攻击提供情报）；<b>完整性：中</b>（污染短链表）。部署文档虽建议排障后删除，但极易遗漏。',
-    fix:'自检页要求访问令牌：打包脚本用 <code>random_bytes(16)</code> 生成并写入包根 <code>.check-token</code>（Web 根之外），页面用 <code>hash_equals()</code> 常量时间比较；令牌文件缺失时一律拒绝。移除路径与配置值回显；全链路实测改为显式 <code>&run=1</code> 触发，并在同一请求内删除探针数据（含点击记录）。',
-    compat:'自检页访问方式变为 <code>/check.php?token=&lt;令牌&gt;</code>；部署说明与 README 已同步，打包输出会直接打印令牌。',
-    code:'$expected = is_file($tokenFile) ? trim((string) file_get_contents($tokenFile)) : \'\';\n$provided = isset($_GET[\'token\']) && is_string($_GET[\'token\']) ? trim($_GET[\'token\']) : \'\';\n\nif ($expected === \'\' || $provided === \'\' || !hash_equals($expected, $provided)) {\n    http_response_code(403);\n    exit;\n}' },
-
-  { id:'SEC-006', sev:'medium', title:'缺少安全响应头并泄露 PHP 版本', mod:'响应头', fixed:true,
-    why:'全部响应均无 CSP、X-Content-Type-Options、X-Frame-Options、Referrer-Policy、Permissions-Policy、HSTS；每个响应附带 <code>X-Powered-By: PHP/8.2.34</code>（精确补丁版本）。缺 CSP 意味着一旦出现注入点即无浏览器侧最后防线；缺 XFO 使管理后台可被 iframe 嵌套（点击劫持）。',
-    impact:'机密性低（版本指纹、Referer 泄露）；完整性低（缺少纵深防御）。',
-    fix:'新增 <code>App\\Security\\SecurityHeaders</code>，在成功与异常两条路径统一附加（避免错误响应漏掉安全头）。CSP 对 HTML 响应<b>按内容动态计算内联脚本 sha256</b>；<code>frame-ancestors</code> 与 XFO 双写；HSTS 仅在 <code>X-Forwarded-Proto: https</code> 且 <code>HSTS_MAX_AGE &gt; 0</code> 时下发（避免锁死纯 HTTP 部署）；<code>X-Powered-By</code> 由入口 <code>header_remove()</code> 移除。',
-    compat:'有影响：跨域部署需把后端源写入 <code>CSP_CONNECT_EXTRA</code>，否则 <code>connect-src \'self\'</code> 会拦截 API；更换统计脚本需设 <code>CSP_SCRIPT_EXTRA</code>。已用真实浏览器验证功能完整。',
-    code:'$hashes = [];\nif (str_starts_with($response->header(\'content-type\') ?? \'\', \'text/html\')) {\n    $hashes = self::inlineScriptHashes($response->body());\n}\n// script-src 拼接 \'self\' + 动态哈希 + 白名单' },
-
-  { id:'SEC-010', sev:'medium', title:'创建接口无频次限制', mod:'API 滥用 / DoS', fixed:true,
-    why:'公开创建接口（<code>/url</code>、<code>/api/url</code>）与开放 API（<code>/api/open/shorten</code>）均无调用频次限制，单一来源可无限创建短码。',
-    impact:'可用性中。持续消耗磁盘、增长 SQLite 文件、无上限产生短码（还可用尽短码空间）。实测修复前 65 次请求全部返回 200。',
-    fix:'新增 <code>request_throttle</code> 表与 <code>App\\Security\\RequestRateLimiter</code>，按 IP 匿名哈希在固定窗口计数；计数在 <code>BEGIN IMMEDIATE</code> 事务内 upsert 后回读，保证并发下不丢失；公开接口与开放 API 共用 <code>create</code> 计数域。',
-    compat:'默认 60 次/分钟/IP，正常人工使用远低于阈值；内网或仅管理员使用可设 <code>CREATE_RATE_LIMIT_MAX=0</code> 关闭。<b>数据库变化：新增表由 CREATE TABLE IF NOT EXISTS 自动创建，对存量库零侵入。</b>',
-    code:'INSERT INTO request_throttle (scope, subject, window_start, hits)\nVALUES (:scope, :subject, :window_start, 1)\nON CONFLICT(scope, subject) DO UPDATE SET\n   hits = CASE WHEN request_throttle.window_start = excluded.window_start\n               THEN request_throttle.hits + 1 ELSE 1 END,\n   window_start = excluded.window_start' },
-
-  { id:'SEC-007', sev:'low', title:'会话 Cookie 的 Secure 属性依赖 APP_URL', mod:'Session', fixed:true,
-    why:'<code>Secure</code> 仅看 <code>APP_URL</code> 前缀。生产若沿用 .env.example 的 <code>http://</code> 默认值，HTTPS 站点会下发不带 Secure 的会话 Cookie，存在被明文回传（同域 HTTP 端点、降级请求）的风险。',
-    impact:'机密性低（会话可能在明文链路上暴露）。',
-    fix:'<code>authCookie()</code>/<code>logout()</code> 增加 <code>$secure</code> 参数，由 <code>SecurityHeaders::isSecureRequest()</code> 传入（识别反代 <code>X-Forwarded-Proto</code>），最终判定为「请求经 HTTPS <b>或</b> APP_URL 为 https」。',
-    compat:'无。本地 HTTP 开发行为不变。' },
-
-  { id:'SEC-008', sev:'low', title:'宝塔 Nginx 参考配置缺少敏感路径阻断', mod:'Nginx 配置', fixed:true,
-    why:'配置只声明 root 与静态规则，未阻断 <code>.env</code>、<code>.git</code>、<code>*.sqlite3</code>、<code>*.log</code> 与后端源码目录，也未禁止把 <code>.php</code> 当静态文件输出。若部署者把 root 误配到项目根（常见失误），上述文件即可被直接下载；PHP-FPM 不可用时 Nginx 会原样输出 PHP 源码。',
-    impact:'机密性低（依赖误配）。',
-    fix:'三个 Nginx 配置（short-url / compose / docker）统一加入敏感文件后缀阻断、后端源码目录阻断、<code>\\.php$</code> 独立 location 并 <code>try_files $uri =404</code>，形成纵深防御。',
-    compat:'无（仅对敏感路径追加拒绝）。注：deploy/nginx/ 为参考模板，实际宝塔站点配置需部署者粘贴生效。' },
-
-  { id:'SEC-009', sev:'low', title:'本地开发默认开启调试且异常消息回显', mod:'错误处理', fixed:true,
-    why:'仓库根 <code>.env</code> 为本地开发值 <code>APP_DEBUG=true</code>；<code>ExceptionHandler</code> 在 debug 下用真实异常消息覆盖对外文案（如 <code>Unable to open SQLite database: /path/...</code>），会暴露文件路径。该文件已被 .gitignore 忽略、未提交。',
-    impact:'机密性低（路径与内部状态）；前提是生产误用该 .env 或显式开启 debug。',
-    fix:'不改变默认逻辑（生产默认 false），在 .env.example 与 README 中强化说明。实测确认生产配置下所有错误响应均不含路径 / SQL / 堆栈。',
+  { id:'SEC-N03', sev:'low', title:'外链探测的 IPv6 内网绕过前缀', mod:'SSRF / 巡检', fixed:true,
+    why:'外链巡检是<b>服务端主动请求用户提交 URL</b> 的功能（游客创建恶意短链，每日 cron 代为发起请求）。IPv6 私有判定未覆盖可编码 IPv4 目标的转换前缀：<code>2002::/16</code>（6to4，如 <code>2002:7f00:1::</code> ≡ 127.0.0.1）、<code>2001:0::/32</code>（Teredo）、<code>64:ff9b::/96</code>（NAT64）、非 ffff 的 <code>::</code> 前缀（IPv4 兼容地址 <code>::10.0.0.1</code>）。',
+    impact:'具备对应路由（罕见）的主机上可借巡检盲探内网；探测结果仅管理员可见。既有防护（IPv4 全段拒绝、DNS pinning、重定向逐跳校验、只读响应头）复核有效。',
+    fix:'<code>#isPrivateV6</code> 补齐上述前缀一律拒绝；公网 IPv6 与 <code>::ffff:8.8.8.8</code> 公网映射形式不受影响（13 应拒 + 4 应放行单元断言）。',
     compat:'无。' },
 
-  { id:'SEC-011', sev:'low', title:'IP 匿名哈希使用库内随机盐', mod:'隐私', fixed:true,
-    why:'<code>sha256(ip + salt)</code>，盐存于同一数据库的 <code>app_meta</code> 表。库文件泄露时攻击者同时拿到盐，可离线枚举 IPv4 空间反推原始 IP——成本不低，但对定位特定地址段是可行的。',
-    impact:'机密性低（隐私去匿名化）。',
-    fix:'支持 <code>IP_HASH_SECRET</code>，设置后改用 <code>hash_hmac(\'sha256\', $ip, $secret)</code>，密钥不落库。顺带修复并发隐患：首次生成盐后<b>回读一次</b>，避免多进程（FPM）并发首请求各自生成不同盐，导致同一 IP 被计为多个访客。',
-    compat:'留空时行为与旧版一致，存量部署无感升级。注意：变更该值会使历史独立访客数从零重新累计。' },
+  { id:'SEC-N04', sev:'info', title:'/healthz 无鉴权返回短链总数', mod:'信息泄露', fixed:false,
+    why:'<code>{"ok":true,"links":N}</code> 是 MIGRATION.md / BAOTA_DEPLOY.md 写明的探活契约。',
+    impact:'总数不构成敏感信息；robots.txt 已对其 noindex。',
+    fix:'<b>接受（不修复）。</b> 删除 links 字段会破坏已文档化 API 契约。',
+    compat:'—' },
 
-  { id:'SEC-013', sev:'info', title:'完整 Referer 长期落库', mod:'隐私', fixed:true,
-    why:'<code>short_url_clicks.referer</code> 保存来源 URL 前 500 字符，来源页可能把 token、一次性链接放在查询串中。而管理后台只用 <code>referer_host</code>，完整 Referer 从未被读取或展示。',
-    impact:'机密性低（第三方凭据可能被留存）。',
-    fix:'<code>ClickTracker</code> 增加 <code>$storeFullReferer</code>（来自 <code>PRIVACY_STORE_REFERER</code>），默认 <code>referer = NULL</code>，<code>referer_host</code> 照常保存。',
-    compat:'列保留（不删列，避免存量库结构变更），仅默认写入 NULL；需要原始 Referer 时设 <code>PRIVACY_STORE_REFERER=true</code> 恢复旧行为。' },
+  { id:'SEC-N05', sev:'info', title:'创建者原始 IP 与 UA 落库', mod:'隐私', fixed:false,
+    why:'<code>short_urls.creator_ip</code> 存原始 IP、<code>creator_ua</code> 存 500 字符 UA——功能设计（后台展示创建者信息），commit 60b69d6 已文档化。',
+    impact:'仅管理端 API 可见（linkStats.creator），不进跳转缓存、不随公开接口暴露。建议运营方评估留存期限。',
+    fix:'<b>接受（不修复）。</b>',
+    compat:'—' },
 
-  { id:'SEC-014', sev:'info', title:'Nginx 未显式传递 HTTP_HOST', mod:'Nginx 配置', fixed:true,
-    why:'<code>fastcgi_params</code> 通常已含 <code>HTTP_HOST $http_host</code>，但新增的 CSRF 同源判定以 Host 为基准，显式声明更稳妥；若代理层传递了错误的 Host，同源判定会失准（表现为合法请求被 403，而非安全绕过）。',
-    impact:'无直接安全影响（属稳健性）。',
-    fix:'三个 Nginx 配置均显式加 <code>fastcgi_param HTTP_HOST $http_host;</code>。' },
+  { id:'SEC-N06', sev:'info', title:'默认口令 admin/admin123', mod:'部署', fixed:false,
+    why:'与第一轮一致的既定默认（config.js 缺省值）。',
+    impact:'未改密码的部署管理后台可被默认凭据登录。',
+    fix:'<b>接受（有缓解）。</b> docker-compose 支持注入 ADMIN_PASSWORD[_HASH]，README/部署文档标注「生产必须修改」，后台设置页有 password_source 提示。',
+    compat:'—' },
 
-  { id:'SEC-015', sev:'info', title:'Docker 镜像未预建 storage 目录', mod:'Docker', fixed:true,
-    why:'php-fpm 镜像默认以 <code>www-data</code> 运行，而 <code>/app/backend</code> 由 root 拷入且不含 <code>storage/</code>。首次请求尝试建目录会失败并抛 <code>StorageException</code>（503）。命名卷挂载会掩盖该问题，但未挂载卷的 <code>docker run</code> 场景会直接失败。',
-    impact:'可用性（首次启动即不可用）。',
-    fix:'镜像内预建 <code>storage/logs</code>，属主设为 <code>www-data</code>、权限 775；命名卷挂载到该路径时继承属主。',
-    compat:'无。',
-    note:'本机无 Docker 环境，此为静态审阅结论，标记为 Potential。' },
+  { id:'SEC-N07', sev:'info', title:'巡检不拦 198.18.0.0/15', mod:'SSRF / 取舍', fixed:false,
+    why:'源码注释明确说明：该段是常见代理/VPN fake-IP 网段，大量真实站点被解析到这里，拦截会造成误判。',
+    impact:'属公网段，无内网直达能力。',
+    fix:'<b>接受（设计取舍）。</b>',
+    compat:'—' },
 
-  { id:'SEC-016', sev:'info', title:'docker-compose 内置默认密码且不可覆盖', mod:'部署配置', fixed:true,
-    why:'<code>ADMIN_PASSWORD: "admin123"</code> 硬编码在 compose 中，无法通过 .env 覆盖，容易随部署直接进入生产。',
-    impact:'机密性（弱口令随部署上线）。',
-    fix:'改为 <code>${ADMIN_PASSWORD:-admin123}</code> 形式，支持从项目根 .env 或环境变量注入；同时支持 <code>ADMIN_PASSWORD_HASH</code>、<code>IP_HASH_SECRET</code>、<code>ALLOWED_ORIGINS</code>、<code>HSTS_MAX_AGE</code> 注入，并保留「生产必须修改」注释。',
-    compat:'默认值仍为 admin123（便于本地试用），生产需显式注入。' },
-
-  { id:'SEC-012', sev:'info', title:'依赖审计：npm 7 项告警均在构建期工具链', mod:'依赖', fixed:false,
-    why:'<code>npm audit</code> 报告 7 项（5 High / 2 Moderate），全部来自 <code>tailwindcss → chokidar / braces / micromatch / fast-glob / postcss-nested</code>。PHP 侧 composer.lock 的运行时（packages）条目数为 <b>0</b>，即无任何第三方运行时依赖。',
-    impact:'无实际影响。匹配 <code>dist/assets/*.js</code> 命中数为 0；这些包仅在构建期用于 glob/watch 与 CSS 解析。',
-    fix:'<b>判定为不修复。</b> 修复方案要求 tailwindcss@4 破坏性大版本升级，而告警均不可达；为消除不可达告警引入样式系统重构风险不划算。已在审计报告记录判定依据。',
+  { id:'SEC-N08', sev:'info', title:'受信位置（私网/回环）可完全伪造代理头', mod:'部署边界', fixed:false,
+    why:'<code>trustProxy</code> 只在直接对端为私网/回环时读取代理头——「私网即可信」的明示边界（默认 true）。',
+    impact:'公网直连不受影响；随附 nginx 强制覆盖 X-Real-IP。部署方应保证 Node 3001 端口不对公网开放（compose 未发布该端口）。',
+    fix:'<b>文档化（Potential）。</b> SEC-N02 修复后伪造仅剩 XFF 回退路径且取右值，实际影响进一步收窄。',
     compat:'—' }
 ];
 
 const SCORES = [
-  { name:'认证安全', v:9,  note:'bcrypt 哈希 · 256 位随机 token · 库存哈希 · 改密撤销全部会话' },
-  { name:'授权安全', v:10, note:'12 个管理接口逐一实测未登录一律 401' },
+  { name:'认证安全', v:9,  note:'bcrypt 哈希 · 256 位随机 token · 改密撤销全部会话 · 登录节流' },
+  { name:'授权安全', v:10, note:'14 个管理接口逐一实测未登录一律 401（含 scan / cleanup×3）' },
   { name:'API 安全', v:9,  note:'Key 仅存 SHA-256 · 重置/删除即时失效 · 双鉴权头' },
-  { name:'数据安全', v:9,  note:'库在 Web 根外 · WAL · 写操作事务化' },
-  { name:'输入验证', v:9,  note:'协议白名单 · CRLF 拒绝 · 长度上限 · LIKE 转义' },
-  { name:'业务逻辑', v:9,  note:'改密失效 · 短码迁移 · 并发无重复' },
-  { name:'前端安全', v:9,  note:'无 XSS sink · 凭据不落存储 · CSP 实测通过' },
-  { name:'部署安全', v:8,  note:'三套 Nginx 加固 · Docker 目录归属（未运行验证）' },
-  { name:'依赖安全', v:9,  note:'PHP 运行时零依赖 · npm 生产 0 漏洞' },
-  { name:'隐私安全', v:9,  note:'HMAC 匿名 IP · Referer 默认不落库' }
+  { name:'数据安全', v:9,  note:'库在 Web 根外 · WAL · 写事务化 · 交付包无库无 .env' },
+  { name:'输入验证', v:9,  note:'协议白名单 · CRLF 拒绝 · 2048 上限 · 体积 413 · LIKE 转义' },
+  { name:'业务逻辑', v:9,  note:'改密失效 · 短码迁移 · 并发无重复 · 缓存主动失效' },
+  { name:'前端安全', v:9,  note:'无 XSS sink · 凭据不落存储 · CSP 动态哈希' },
+  { name:'部署安全', v:8,  note:'三套 Nginx 加固 · 3001 不对公网（Docker/Nginx 未实测）' },
+  { name:'依赖安全', v:10, note:'后端运行时仅 bcryptjs · 双侧 npm audit 0 漏洞' },
+  { name:'隐私安全', v:8,  note:'点击侧 HMAC 匿名 IP；创建者原始 IP 落库为文档化取舍' }
 ];
 
 const SUITES = [
-  { name:'Unit 单元',     n:45, pct:26 },
-  { name:'Feature 功能',  n:67, pct:39 },
-  { name:'Security 安全', n:60, pct:35 },
-  { name:'Compat 兼容',   n:0,  pct:0 }
+  { name:'backend 既有套件', n:97, pct:89 },
+  { name:'本轮新增安全测试',  n:12, pct:11 }
 ];
 
 const TOOLS = [
-  { cmd:'composer test',        res:'OK（172 tests, 479 assertions）',   ok:true },
-  { cmd:'composer analyse',     res:'PHPStan level 8 · No errors',       ok:true },
-  { cmd:'composer lint',        res:'php-cs-fixer · 0 of 73 files',      ok:true },
-  { cmd:'composer audit',       res:'运行时依赖 0 条 · 无适用漏洞',        ok:true },
-  { cmd:'npm audit --omit=dev', res:'found 0 vulnerabilities',           ok:true },
-  { cmd:'npm audit',            res:'7 项告警（5 High）· 均不可达',        ok:true },
-  { cmd:'npm run build',        res:'成功 · 189.50 kB JS · 无 source map', ok:true },
-  { cmd:'实际渗透复测',           res:'21 项检查全部 PASS',                ok:true },
-  { cmd:'浏览器 CSP 复核',        res:'首页 + 管理后台功能完整 · 无违规',    ok:true }
+  { cmd:'npm test（backend）',  res:'109 tests / 23 suites · 全过',    ok:true },
+  { cmd:'npm audit（backend）', res:'0 vulnerabilities（含 dev）',     ok:true },
+  { cmd:'npm audit --omit=dev（根）', res:'0 vulnerabilities',         ok:true },
+  { cmd:'攻击重放（修复后）',    res:'三类注入原语全部失效',             ok:true },
+  { cmd:'常规安全验证组合',      res:'55 项断言复核通过',               ok:true },
+  { cmd:'14 个管理接口未授权',   res:'全部 401',                      ok:true },
+  { cmd:'CSRF 五场景',         res:'跨站 403 / 同源 200 / Key 豁免 200', ok:true },
+  { cmd:'静态穿越 / 危险 scheme', res:'全部拒绝',                      ok:true },
+  { cmd:'会话与 Key 生命周期',   res:'改密撤销 / 旧 Key 即时失效',        ok:true }
 ];
 
 const SURFACE = [
-  ['创建短链','/url','POST','视配置','url','中','200（同源）'],
-  ['创建短链别名','/api/url','POST','视配置','url','中','401'],
-  ['开放 API','/api/open/shorten','POST','API Key','url','中','401'],
-  ['短链跳转','/{code}','GET','否','code','中','404'],
-  ['登录','/api/auth/login','POST','否','username, password','高','401'],
+  ['创建短链','/url（旧接口，保留）','POST','视 guest_access','url','中','200（同源）'],
+  ['创建别名','/api/url','POST','同左','url','中','401'],
+  ['开放 API','/api/open/shorten','POST','API Key','头 + url','中','401'],
+  ['短码跳转','/{code}','GET','否','路径任意字节','高','302 / 404'],
+  ['登录','/api/auth/login','POST','否','凭据 JSON','高','401/429'],
   ['会话查询','/api/auth/me','GET','否','—','低','200'],
-  ['管理面板','/admin','GET','否（页面）','—','低','200'],
-  ['概览统计','/api/admin/overview','GET','是','—','高','401'],
-  ['短链列表','/api/admin/links','GET','是','page, per_page, q','高','401'],
-  ['编辑短链','/api/admin/links/{code}','PUT','是','code, url','高','401'],
-  ['删除短链','/api/admin/links/{code}','DELETE','是','—','高','401'],
-  ['单链统计','/api/admin/links/{code}/stats','GET','是','—','中','401'],
-  ['读取设置','/api/admin/settings','GET','是','—','中','401'],
-  ['修改设置','/api/admin/settings','PUT','是','三个开关','高','401'],
-  ['修改密码','/api/admin/settings/password','POST','是','当前/新密码','高','401'],
-  ['Key 列表','/api/admin/keys','GET','是','—','中','401'],
-  ['创建 Key','/api/admin/keys','POST','是','name','高','401'],
-  ['重置 Key','/api/admin/keys/{id}/reset','POST','是','—','高','401'],
-  ['删除 Key','/api/admin/keys/{id}','DELETE','是','—','中','401']
+  ['概览','/api/admin/overview','GET','管理员','period','高','401'],
+  ['短链列表','/api/admin/links','GET','管理员','page/q/health','高','401'],
+  ['触发巡检','/api/admin/links/scan','POST','管理员','limit','高','401'],
+  ['失效清理×3','/api/admin/links/cleanup-*','POST','管理员','—','高','401'],
+  ['编辑短链','/api/admin/links/{code}','PUT','管理员','code,url','高','401'],
+  ['删除短链','/api/admin/links/{code}','DELETE','管理员','—','高','401'],
+  ['单链统计','/api/admin/links/{code}/stats','GET','管理员','period','中','401'],
+  ['读/改设置','/api/admin/settings','GET/PUT','管理员','白名单键','高','401'],
+  ['改密码','/api/admin/settings/password','POST','管理员','当前/新密码','高','401'],
+  ['Key 管理','/api/admin/keys*','GET/POST/DELETE','管理员','name/id','高','401'],
+  ['健康检查','/healthz','GET','否','—','低','200'],
+  ['后台入口','settings.admin_path()','GET/HEAD','页面公开','设置','低','200/404'],
+  ['静态资源','/*.{js,css,…}','GET','否','路径','中','200/404']
 ];
 
 const COMPARE = {
-  cmpTraversal: { head:['Payload','修复前','修复后'], rows:[
-    ['/../.env',                                     {c:200, t:'88 B · 输出配置'}, {c:404, t:'无泄露'}],
-    ['/%2e%2e/.env',                                 {c:200, t:'88 B · 同左'},     {c:404, t:'无泄露'}],
-    ['/..%2f.env',                                   {c:200, t:'88 B · 同左'},     {c:404, t:'无泄露'}],
-    ['/../backend/storage/short-url.sqlite3',         {c:200, t:'64 KB · SQLite'},  {c:404, t:'无泄露'}],
-    ['/../backend/app/Services/AuthService.php',      {c:200, t:'6.4 KB · 源码'},   {c:404, t:'无泄露'}],
-    ['/../backend/composer.lock',                     {c:200, t:'160 KB'},          {c:404, t:'无泄露'}],
-    ['/../.git/config',                               {c:200, t:'309 B'},           {c:404, t:'无泄露'}]
+  cmpTraversal: { head:['注入原语','修复前','修复后'], rows:[
+    ['A 劫持既有短码 S',  {c:302, t:'Location: evil.example'}, {c:302, t:'原地址'}],
+    ['B 404 拒绝服务 S', {c:404, t:'Unknown URL（库里真实存在）'}, {c:302, t:'原地址'}],
+    ['C 凭空造码 T',     {c:302, t:'Location: attacker.test'}, {c:404, t:'Unknown URL'}],
+    ['注入请求本身',      {c:404, t:'（投毒已在缓存层完成）'}, {c:404, t:'缓存零污染'}]
   ]},
   cmpCsrf: { head:['场景','修复前','修复后'], rows:[
-    ['跨站 Origin + JSON',        {c:200, t:'Key 被创建'}, {c:403, t:'拒绝'}],
-    ['跨站 text/plain 简单表单',  {c:200, t:'Key 被创建'}, {c:403, t:'拒绝'}],
-    ['跨站 Referer，无 Origin',   {c:200, t:'放行'},       {c:403, t:'拒绝'}],
-    ['Origin: null',             {c:200, t:'放行'},       {c:403, t:'拒绝'}],
-    ['跨站 DELETE 短链',          {c:200, t:'删除成功'},   {c:403, t:'拒绝'}],
-    ['同源（正常前端）',           {c:200, t:'放行'},       {c:200, t:'放行'}],
-    ['X-API-Key 无 Origin',      {c:200, t:'放行'},       {c:200, t:'放行（例外）'}]
+    ['跨站 Origin + JSON',       {c:200, t:'放行'}, {c:403, t:'拒绝'}],
+    ['text/plain 简单表单跨站',   {c:200, t:'放行'}, {c:403, t:'拒绝'}],
+    ['跨站 Referer，无 Origin',  {c:200, t:'放行'}, {c:403, t:'拒绝'}],
+    ['无 Origin/Referer',       {c:200, t:'放行'}, {c:403, t:'拒绝'}],
+    ['同源（正常前端）',          {c:200, t:'放行'}, {c:200, t:'放行'}],
+    ['X-API-Key 无 Origin',     {c:200, t:'放行'}, {c:200, t:'豁免（设计）'}]
   ]},
   cmpSize: { head:['Payload','修复前','修复后'], rows:[
-    ['URL 1024 B',        {c:200, t:'入库'},           {c:200, t:'正常'}],
-    ['URL 2048 B',        {c:200, t:'入库'},           {c:200, t:'边界可用'}],
-    ['URL 4096 B',        {c:200, t:'入库'},           {c:413, t:'拒绝'}],
-    ['URL 102400 B',      {c:200, t:'入库'},           {c:413, t:'拒绝'}],
-    ['URL 1048576 B',     {c:200, t:'入库 · 1.10 s'},  {c:413, t:'拒绝'}],
-    ['请求体 2 MB 垃圾',   {c:400, t:'1.15 s'},        {c:413, t:'拒绝'}]
+    ['URL 2048 字节',    {c:200, t:'边界可用'}, {c:200, t:'边界可用'}],
+    ['URL 4096 字节',    {c:200, t:'入库'},     {c:413, t:'拒绝'}],
+    ['请求体 20KB',      {c:200, t:'读入内存'}, {c:413, t:'传输层丢弃'}]
   ]},
   cmpIp: { head:['观测项','修复前','修复后'], rows:[
-    ['限流桶 ip_hash',   {c:200, t:'anonymous（共享）'}, {c:403, t:'真实 IP 哈希'}],
-    ['跳转 ip_hash',     {c:200, t:'NULL'},             {c:403, t:'真实哈希'}],
-    ['独立访客统计',      {c:200, t:'恒为 0'},            {c:403, t:'正常计数'}],
-    ['换 XFF 绕过限流',  {c:200, t:'可绕过（共享桶）'},    {c:403, t:'不可绕过'}]
+    ['X-Forwarded-For: "伪造, 真实"', {c:200, t:'取伪造首项'}, {c:403, t:'取最右真实值'}],
+    ['X-Real-IP（随附 nginx 强制覆盖）', {c:200, t:'可信'},   {c:200, t:'可信，优先级不变'}],
+    ['公网直连伪造代理头',             {c:403, t:'已忽略'},   {c:403, t:'仍忽略'}]
   ]},
-  cmpRate: { head:['场景','修复前','修复后'], rows:[
-    ['65 次连续创建',      {c:200, t:'65 × 200'},          {c:429, t:'56 × 200 + 9 × 429'}],
-    ['不同 IP 配额',       {c:200, t:'无限制'},             {c:403, t:'独立不共享'}],
-    ['开放 API 限流',      {c:200, t:'无限制'},             {c:403, t:'同样受限'}],
-    ['并发计数正确性',      {c:200, t:'—'},                 {c:403, t:'10 并发 → fails=5'}]
+  cmpRate: { head:['IPv6 探测目标','修复前','修复后'], rows:[
+    ['2002:7f00:1::（6to4 ≡ 127.0.0.1）',  {c:200, t:'可探测'}, {c:403, t:'拒绝'}],
+    ['64:ff9b::7f00:1（NAT64）',            {c:200, t:'可探测'}, {c:403, t:'拒绝'}],
+    ['::10.0.0.1（IPv4 兼容）',             {c:200, t:'可探测'}, {c:403, t:'拒绝'}],
+    ['::ffff:8.8.8.8（公网映射）',          {c:200, t:'可探测'}, {c:200, t:'仍可探测'}],
+    ['2606:4700::（公网原生）',             {c:200, t:'可探测'}, {c:200, t:'仍可探测'}]
   ]}
 };
 
@@ -1010,7 +948,7 @@ safe('donut', function donut() {
     acc += len;
   });
 
-  const labels = { high:'High 高危', medium:'Medium 中危', low:'Low 低危', info:'Info 信息/已修复' };
+  const labels = { high:'High 高危', medium:'Medium 中危', low:'Low 低危', info:'Info 取舍/已核实' };
   const legend = $('#dlegend');
   if (legend) {
     legend.innerHTML = order.map(k => `

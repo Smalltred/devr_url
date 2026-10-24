@@ -292,16 +292,24 @@ export class HttpLinkProbe {
         const normalized = address.toLowerCase()
 
         if (normalized === '::' || normalized === '::1') return true
-        if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true // fc00::/7
-        if (/^fe[89ab]/.test(normalized)) return true // fe80::/10
-        if (normalized.startsWith('ff')) return true // 组播 ff00::/8
-        if (normalized.startsWith('2001:db8')) return true // 文档网段
-
-        // IPv4 映射地址 ::ffff:a.b.c.d
+        // IPv4 映射地址 ::ffff:a.b.c.d —— 按 IPv4 规则判定（公网映射地址放行）
         const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalized)
         if (mapped) {
             return HttpLinkProbe.#isPrivateV4(mapped[1])
         }
+        // 其余 :: 开头的均为未指定/环回/IPv4 兼容地址（::a.b.c.d 可直达内网），一律拒绝
+        if (normalized.startsWith('::')) return true
+
+        if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true // fc00::/7
+        if (/^fe[89ab]/.test(normalized)) return true // fe80::/10
+        if (normalized.startsWith('ff')) return true // 组播 ff00::/8
+        if (normalized.startsWith('2001:db8')) return true // 文档网段
+        // Teredo（2001:0::/32）与 6to4（2002::/16）：前缀中可编码任意 IPv4 地址，
+        // 包括环回/内网——具备对应路由（NAT64/6to4 网关）的主机上会被转发到内网
+        if (/^2001:0($|:)/.test(normalized)) return true
+        if (normalized.startsWith('2002:')) return true
+        // NAT64 众所周知前缀 64:ff9b::/96 与本地用 64:ff9b:1::/48：同样可编码 IPv4 目标
+        if (normalized.startsWith('64:ff9b:')) return true
 
         return false
     }

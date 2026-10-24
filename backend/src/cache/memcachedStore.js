@@ -10,6 +10,9 @@ import net from 'node:net'
 const KEY_PREFIX = 'devr:'
 const FAILURE_COOLDOWN_MS = 30_000
 const MAX_TTL_SECONDS = 2_592_000 // 30 天；超过会被 memcached 当作绝对时间戳
+// 可见 ASCII 且不含空格/控制字符，长度 ≤ 250（memcached 键上限）。
+// 空格会把 get 变多键命令、CRLF 会注入新命令——含这些字节的键一律拒绝。
+const SAFE_KEY = /^[\x21-\x7e]{1,250}$/
 
 /**
  * 稳定哈希：用于多实例间选择服务器（单实例部署时始终为 0）。
@@ -44,6 +47,14 @@ export class MemcachedStore {
         if (!this.#usable()) {
             return null
         }
+        if (!MemcachedStore.isSafeKey(this.#key(key))) {
+            this.logger.error('memcached rejected unsafe key', {
+                operation: 'get',
+                key: String(key).slice(0, 40).replace(/[^\x20-\x7e]/g, '?'),
+            })
+
+            return null
+        }
 
         try {
             const response = await this.#send(Buffer.from(`get ${this.#key(key)}\r\n`, 'utf8'))
@@ -58,6 +69,14 @@ export class MemcachedStore {
 
     async set(key, value, ttlSeconds) {
         if (!this.#usable()) {
+            return false
+        }
+        if (!MemcachedStore.isSafeKey(this.#key(key))) {
+            this.logger.error('memcached rejected unsafe key', {
+                operation: 'set',
+                key: String(key).slice(0, 40).replace(/[^\x20-\x7e]/g, '?'),
+            })
+
             return false
         }
 
@@ -81,6 +100,9 @@ export class MemcachedStore {
 
     async delete(key) {
         if (!this.#usable()) {
+            return true
+        }
+        if (!MemcachedStore.isSafeKey(this.#key(key))) {
             return true
         }
 
@@ -213,6 +235,17 @@ export class MemcachedStore {
                 }
             })
         })
+    }
+
+    /**
+     * 键是否可安全进入文本协议命令行（可见 ASCII、无空白、长度合规）。
+     * 供本类各命令与调用方在写入前做同一套判定。
+     *
+     * @param {string} key
+     * @returns {boolean}
+     */
+    static isSafeKey(key) {
+        return typeof key === 'string' && SAFE_KEY.test(key)
     }
 
     /**

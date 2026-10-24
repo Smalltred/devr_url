@@ -59,10 +59,14 @@ export function resolveClientIp(remoteAddress, headers = {}, trustProxy = true) 
         return real
     }
 
+    // X-Forwarded-For 从右往左取：最右侧由最近的受信代理追加，最可信；
+    // 左侧条目可被客户端伪造（nginx 的 $proxy_add_x_forwarded_for 是“追加”语义），
+    // 若取首项，攻击者在代理之后即可轮换伪造 IP 绕过登录节流与创建限流。
     const forwarded = headerValue(headers['x-forwarded-for'])
     if (typeof forwarded === 'string' && forwarded !== '') {
-        for (const part of forwarded.split(',')) {
-            const candidate = normalizeIp(part)
+        const parts = forwarded.split(',')
+        for (let i = parts.length - 1; i >= 0; i -= 1) {
+            const candidate = normalizeIp(parts[i])
             if (candidate !== '') {
                 return candidate
             }
