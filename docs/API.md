@@ -218,10 +218,13 @@ GET /api/admin/overview?period=day
 ### 短链分页列表
 
 ```http
-GET /api/admin/links?page=1&per_page=20&q=关键词
+GET /api/admin/links?page=1&per_page=20&q=关键词&health=invalid&domain=example.com
 ```
 
 - `q` 对短码与目标链接做模糊匹配；`per_page` 上限 100。
+- `health`：空 = 全部，`invalid` = 失效（`broken` + `dead`），也可传 `ok` / `broken` / `dead` / `unknown`。
+- `domain`：按目标主机名精确筛选（大小写不敏感，包含端口；子域名如 `sub.example.com` 与
+  `example.com` 视为不同域名），留空 = 全部域名。
 
 ```json
 {
@@ -234,11 +237,16 @@ GET /api/admin/links?page=1&per_page=20&q=关键词
         "created_at": "2026-10-05 08:30:00",
         "clicks": 120,
         "clicks_today": 9
-    }]
+    }],
+    "domains": [
+        {"domain": "example.com", "count": 9},
+        {"domain": "sub.example.com", "count": 3}
+    ]
 }
 ```
 
-`created_at` 为北京时间（UTC+8）。
+`created_at` 为北京时间（UTC+8）。`domains` 为全站目标域名汇总（含端口），供后台域名下拉使用，
+不受 `q` / `health` / `domain` 筛选影响。
 
 列表项还包含外链健康状态：
 

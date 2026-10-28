@@ -12,7 +12,7 @@
 | Node | v24.18.0（npm 11.16.0） |
 | 被测服务 | `backend/src/server.js`（与生产同一条入口链路） |
 | 端口 | 修复前 3021 / 修复后 3022（独立端口，**未占用开发用 3001**） |
-| 测试数据库 | `E:/zcode/.tools/audit2/{test,fixtest/test}.sqlite3`（**独立临时库，未触碰 `backend/storage/short-url.sqlite3`**） |
+| 测试数据库 | `artifacts/security-audit-2026-10-24/{test,fixtest/test}.sqlite3`（**独立临时库，未触碰 `backend/storage/short-url.sqlite3`**；审计结束后已删除，脚本与日志保留在同一 `artifacts/` 目录） |
 | 缓存 | 项目自带 `backend/tools/mock-memcached.js`（11221 / 11222，实现 memcached 文本协议） |
 | 服务环境变量 | `APP_ENV=production`、`APP_DEBUG=false`、`ADMIN_PASSWORD=secret123`、`CACHE_DRIVER=memcached`、`IP_HASH_SECRET=audit-secret` |
 | 攻击工具 | 自写 Node 脚本（`node:http` / 原始 socket，完全控制请求行编码，`--path-as-is` 语义） |
