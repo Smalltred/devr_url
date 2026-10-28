@@ -80,7 +80,8 @@ regular/thin 材质层——两层半透明背景会互相干扰、降低对比�
 
 **无障碍**：补齐 `role=alert`、`aria-live`、`role=tablist/tab/tabpanel`、图表语义；
 支持 `prefers-reduced-motion`（位移降级为交叉淡入）、`prefers-reduced-transparency`、
-`prefers-contrast`。
+`prefers-contrast`。`sr-only` 不要直接加在 `<table>` 上——表格自动布局会忽略 1px 宽度，
+实测移动端撑出横向滚动条；正确做法是套一层普通 `div`（如统计图的视觉隐藏数据表）。
 
 ## 界面预览
 

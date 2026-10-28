@@ -17,6 +17,22 @@ function likePattern(query) {
     return `%${trimmed.replace(/[\\%_]/g, (char) => `\\${char}`)}%`
 }
 
+/**
+ * 从 url 列提取小写主机名（含端口），用于域名筛选与域名汇总。
+ *
+ * SQLite 没有 URL 解析函数：取 :// 之后的部分，去掉可能存在的 userinfo，
+ * 再截断到首个 / ? # 之前。与前端下拉中的值来自同一表达式，筛选必然一致。
+ *
+ * @param {string} column
+ */
+function hostExpression(column = 'url') {
+    const rest = `substr(${column}, instr(${column}, '://') + 3)`
+    const authority = `(case when instr(${rest}, '@') > 0 then substr(${rest}, instr(${rest}, '@') + 1) else ${rest} end)`
+    const cut = (separator) => `(case when instr(${authority}, '${separator}') > 0 then instr(${authority}, '${separator}') - 1 else length(${authority}) end)`
+
+    return `lower(substr(${authority}, 1, min(${cut('/')}, ${cut('?')}, ${cut('#')})))`
+}
+
 export class SqliteUrlRepository {
     /** @param {import('./database.js').Database} database */
     constructor(database) {
@@ -100,12 +116,35 @@ export class SqliteUrlRepository {
     }
 
     /**
+     * 目标域名汇总（含端口），供后台域名筛选下拉使用。
+     * 统计的是该域名下的全部短链，不受当前状态/关键词筛选影响。
+     *
+     * @returns {{domain: string, count: number}[]}
+     */
+    listDomains() {
+        const rows = this.database.all(
+            `SELECT ${hostExpression()} AS domain, COUNT(*) AS total
+             FROM short_urls
+             WHERE instr(url, '://') > 0
+             GROUP BY domain
+             HAVING domain != ''
+             ORDER BY total DESC, domain ASC`,
+        )
+
+        return rows.map((row) => ({
+            domain: String(row.domain),
+            count: Number(row.total),
+        }))
+    }
+
+    /**
      * @param {number} limit
      * @param {number} offset
      * @param {string} query
      * @param {string} healthStatus 空 = 全部
+     * @param {string} domain 目标域名（精确匹配，含端口）；空 = 全部
      */
-    paginate(limit, offset, query, healthStatus = '') {
+    paginate(limit, offset, query, healthStatus = '', domain = '') {
         const conditions = []
         const params = []
 
@@ -121,6 +160,12 @@ export class SqliteUrlRepository {
         } else if (['ok', 'broken', 'dead', 'unknown'].includes(healthStatus)) {
             conditions.push('health_status = ?')
             params.push(healthStatus)
+        }
+
+        const domainFilter = typeof domain === 'string' ? domain.trim().toLowerCase().slice(0, 255) : ''
+        if (domainFilter !== '') {
+            conditions.push(`${hostExpression()} = ?`)
+            params.push(domainFilter)
         }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''

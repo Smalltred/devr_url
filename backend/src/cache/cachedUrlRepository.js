@@ -84,8 +84,12 @@ export class CachedUrlRepository {
         return this.inner.countAll()
     }
 
-    paginate(limit, offset, query, healthStatus = '') {
-        return this.inner.paginate(limit, offset, query, healthStatus)
+    listDomains() {
+        return this.inner.listDomains()
+    }
+
+    paginate(limit, offset, query, healthStatus = '', domain = '') {
+        return this.inner.paginate(limit, offset, query, healthStatus, domain)
     }
 
     async update(code, newCode, url) {

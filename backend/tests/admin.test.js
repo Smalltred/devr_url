@@ -121,6 +121,40 @@ describe('管理后台 · 基础', () => {
         assert.equal(broken.json.health.broken, 1)
     })
 
+    it('列表按目标域名精确筛选，并返回域名汇总', async () => {
+        const rows = [
+            ['domA', 'https://dom-test.example/a'],
+            ['domB', 'https://DOM-TEST.example/b'],
+            ['domC', 'https://sub.dom-test.example/c'],
+            ['domD', 'https://other-test.example/d'],
+            ['domE', 'https://dom-test.example:8443/e'],
+        ]
+
+        try {
+            for (const [code, url] of rows) {
+                db.run('INSERT INTO short_urls (code, url) VALUES (?, ?)', code, url)
+            }
+
+            // 大小写不敏感；只匹配精确主机名，不包含子域名或带端口的变体
+            const filtered = await server.request(
+                'GET',
+                '/api/admin/links?per_page=100&domain=DOM-TEST.EXAMPLE',
+                { cookie: token },
+            )
+            assert.equal(filtered.status, 200)
+            assert.equal(filtered.json.total, 2)
+            assert.deepEqual(filtered.json.items.map((item) => item.code).sort(), ['domA', 'domB'])
+
+            const domains = Object.fromEntries(filtered.json.domains.map((item) => [item.domain, item.count]))
+            assert.equal(domains['dom-test.example'], 2)
+            assert.equal(domains['sub.dom-test.example'], 1)
+            assert.equal(domains['other-test.example'], 1)
+            assert.equal(domains['dom-test.example:8443'], 1)
+        } finally {
+            db.run("DELETE FROM short_urls WHERE code IN ('domA', 'domB', 'domC', 'domD', 'domE')")
+        }
+    })
+
     it('改 URL / 改短码 / 冲突 / 非法短码 / 保留字 / 不存在', async () => {
         db.run('INSERT INTO short_urls (code, url) VALUES (?, ?)', 'abc', 'https://old.example.com')
         db.run('INSERT INTO short_urls (code, url) VALUES (?, ?)', 'taken', 'https://taken.example.com')

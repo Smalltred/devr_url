@@ -176,8 +176,9 @@ export function createApp(config, overrides = {}) {
         const perPage = Number.parseInt(request.queryParam('per_page') ?? '20', 10)
         const query = request.queryParam('q') ?? ''
         const healthStatus = request.queryParam('health') ?? ''
+        const domain = request.queryParam('domain') ?? ''
 
-        return Response.json(admin.links(page, perPage, query, healthStatus))
+        return Response.json(admin.links(page, perPage, query, healthStatus, domain))
     }))
 
     // 外链巡检（静态段必须先于 /links/{code}）

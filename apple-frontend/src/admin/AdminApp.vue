@@ -52,6 +52,9 @@ const periodLoading = ref(false)
 // 外链巡检
 // 健康状态筛选：'' = 全部，invalid / ok / unknown
 const healthFilter = ref('')
+// 目标域名筛选：'' = 全部域名；值为精确主机名（含端口）
+const domainFilter = ref('')
+const domains = ref([])
 // 健康概览：{ok, invalid, unknown, pending, last_scan_at}
 const health = ref(null)
 const scanning = ref(false)
@@ -73,6 +76,15 @@ const tabItems = [
 ]
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
+
+// 当前筛选域名若已没有任何短链，仍保留在选项中，避免下拉显示为空白
+const domainOptions = computed(() => {
+    if (domainFilter.value && !domains.value.some((item) => item.domain === domainFilter.value)) {
+        return [{ domain: domainFilter.value, count: 0 }, ...domains.value]
+    }
+
+    return domains.value
+})
 
 onMounted(async () => {
     try {
@@ -97,12 +109,14 @@ async function refresh() {
                 per_page: perPage.value,
                 q: appliedKeyword.value,
                 health: healthFilter.value || undefined,
+                domain: domainFilter.value || undefined,
             }),
         ])
         overview.value = ov
         items.value = list.items
         total.value = list.total
         page.value = list.page
+        domains.value = Array.isArray(list.domains) ? list.domains : []
         health.value = list.health || null
         totalPagesMaxGuard()
     } catch (err) {
@@ -237,6 +251,15 @@ function healthBadgeBackground(status) {
 function setHealthFilter(value) {
     if (healthFilter.value === value) return
     healthFilter.value = value
+    page.value = 1
+    refresh()
+}
+
+/** 切换目标域名筛选 */
+function setDomainFilter(value) {
+    const next = String(value || '').trim()
+    if (domainFilter.value === next) return
+    domainFilter.value = next
     page.value = 1
     refresh()
 }
@@ -502,8 +525,8 @@ function showNotice(message) {
                         </div>
                     </div>
 
-                    <!-- 状态筛选 -->
-                    <div class="mb-4">
+                    <!-- 筛选：外链状态 + 目标域名 -->
+                    <div class="mb-4 flex flex-wrap items-center gap-3">
                         <AppSegmented
                             :model-value="healthFilter"
                             :items="healthFilters"
@@ -511,6 +534,34 @@ function showNotice(message) {
                             label="按外链状态筛选"
                             @update:model-value="setHealthFilter"
                         />
+                        <div class="domain-filter w-full sm:ml-auto sm:w-auto">
+                            <select
+                                class="input domain-select w-full"
+                                :value="domainFilter"
+                                aria-label="按目标域名筛选"
+                                :title="domainFilter || '全部域名'"
+                                @change="setDomainFilter($event.target.value)"
+                            >
+                                <option value="">全部域名</option>
+                                <option
+                                    v-for="item in domainOptions"
+                                    :key="item.domain"
+                                    :value="item.domain"
+                                >{{ item.domain }}（{{ item.count }}）</option>
+                            </select>
+                            <svg
+                                class="domain-filter-chevron"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="m6 9 6 6 6-6" />
+                            </svg>
+                        </div>
                     </div>
 
                     <form class="mb-5 flex flex-col gap-3 sm:flex-row" @submit.prevent="search">
@@ -676,3 +727,42 @@ function showNotice(message) {
         <AppToast :message="notice" @expire="notice = ''" />
     </div>
 </template>
+
+<style scoped>
+/* 目标域名下拉：与状态分段控件同一行，右侧对齐；移动端独占一行 */
+.domain-filter {
+    position: relative;
+}
+
+.domain-select {
+    width: auto;
+    min-width: 190px;
+    max-width: 280px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0 34px 0 12px;
+    font-size: var(--text-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    appearance: none;
+}
+
+.domain-filter-chevron {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    width: 14px;
+    height: 14px;
+    transform: translateY(-50%);
+    color: var(--color-text-tertiary);
+    pointer-events: none;
+}
+
+@media (max-width: 639.98px) {
+    .domain-select {
+        width: 100%;
+        max-width: none;
+    }
+}
+</style>

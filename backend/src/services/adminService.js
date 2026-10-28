@@ -216,13 +216,14 @@ export class AdminService {
      * @param {number} perPage
      * @param {string} query
      * @param {string} healthStatus 空 = 全部；invalid = 失效（待确认 + 已判定）
+     * @param {string} domain 目标域名（精确匹配）；空 = 全部域名
      */
-    links(page, perPage, query, healthStatus = '') {
+    links(page, perPage, query, healthStatus = '', domain = '') {
         const safePage = Math.max(1, Number(page) || 1)
         const safePerPage = Math.min(100, Math.max(1, Number(perPage) || 20))
         const filter = ['ok', 'invalid', 'broken', 'dead', 'unknown'].includes(healthStatus) ? healthStatus : ''
 
-        const result = this.urls.paginate(safePerPage, (safePage - 1) * safePerPage, query, filter)
+        const result = this.urls.paginate(safePerPage, (safePage - 1) * safePerPage, query, filter, domain)
         const codes = result.items.map((item) => item.code)
         const totals = this.clicks.totalByCodes(codes)
         const todays = this.clicks.todayByCodes(codes)
@@ -245,6 +246,7 @@ export class AdminService {
             page: safePage,
             per_page: safePerPage,
             items,
+            domains: this.urls.listDomains(),
             health: this.health.overview(),
         }
     }

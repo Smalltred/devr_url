@@ -141,19 +141,23 @@ function formatLabel(date) {
                 <span>{{ formatLabel(series[series.length - 1]?.date) }}</span>
             </figcaption>
 
-            <!-- 供辅助技术逐点读取；视觉上隐藏 -->
-            <table class="sr-only">
-                <caption>{{ summary }}</caption>
-                <thead>
-                    <tr><th scope="col">桶起始日</th><th scope="col">点击</th></tr>
-                </thead>
-                <tbody>
-                    <tr v-for="point in series" :key="point.date">
-                        <td>{{ formatLabel(point.date) }}</td>
-                        <td>{{ point.clicks }}</td>
-                    </tr>
-                </tbody>
-            </table>
+            <!-- 供辅助技术逐点读取；视觉上隐藏。
+                 sr-only 必须套在普通 div 上：table 的自动布局会忽略 1px 宽度，
+                 直接加在 table 上会撑出横向滚动条（移动端后台实测溢出 109px）。 -->
+            <div class="sr-only">
+                <table>
+                    <caption>{{ summary }}</caption>
+                    <thead>
+                        <tr><th scope="col">桶起始日</th><th scope="col">点击</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="point in series" :key="point.date">
+                            <td>{{ formatLabel(point.date) }}</td>
+                            <td>{{ point.clicks }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </template>
     </figure>
 </template>

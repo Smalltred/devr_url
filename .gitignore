@@ -14,6 +14,8 @@
 
 # testing
 /coverage
+# 审计/验证临时产物（脚本、日志、测试库）
+/artifacts/
 
 # 前端构建产物：dist/ 为默认前端（apple-frontend），dist-legacy/ 为对照用的旧前端
 /dist
