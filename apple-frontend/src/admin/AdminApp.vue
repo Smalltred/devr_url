@@ -12,6 +12,7 @@ import { computed, onMounted, ref } from 'vue'
 import api, { errorMessage } from '../services/entity.js'
 import AppButton from '../components/AppButton.vue'
 import AppSegmented from '../components/AppSegmented.vue'
+import AppSelect from '../components/AppSelect.vue'
 import AppPeriodSwitch from '../components/AppPeriodSwitch.vue'
 import AppThemeToggle from '../components/AppThemeToggle.vue'
 import AppToast from '../components/AppToast.vue'
@@ -79,11 +80,17 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / perPage.va
 
 // 当前筛选域名若已没有任何短链，仍保留在选项中，避免下拉显示为空白
 const domainOptions = computed(() => {
+    const items = domains.value.map((item) => ({
+        value: item.domain,
+        label: item.domain,
+        count: item.count,
+    }))
+
     if (domainFilter.value && !domains.value.some((item) => item.domain === domainFilter.value)) {
-        return [{ domain: domainFilter.value, count: 0 }, ...domains.value]
+        items.unshift({ value: domainFilter.value, label: domainFilter.value, count: 0 })
     }
 
-    return domains.value
+    return [{ value: '', label: '全部域名' }, ...items]
 })
 
 onMounted(async () => {
@@ -534,33 +541,14 @@ function showNotice(message) {
                             label="按外链状态筛选"
                             @update:model-value="setHealthFilter"
                         />
-                        <div class="domain-filter w-full sm:ml-auto sm:w-auto">
-                            <select
-                                class="input domain-select w-full"
-                                :value="domainFilter"
-                                aria-label="按目标域名筛选"
-                                :title="domainFilter || '全部域名'"
-                                @change="setDomainFilter($event.target.value)"
-                            >
-                                <option value="">全部域名</option>
-                                <option
-                                    v-for="item in domainOptions"
-                                    :key="item.domain"
-                                    :value="item.domain"
-                                >{{ item.domain }}（{{ item.count }}）</option>
-                            </select>
-                            <svg
-                                class="domain-filter-chevron"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                aria-hidden="true"
-                            >
-                                <path d="m6 9 6 6 6-6" />
-                            </svg>
+                        <div class="domain-filter">
+                            <AppSelect
+                                :model-value="domainFilter"
+                                :items="domainOptions"
+                                label="按目标域名筛选"
+                                placeholder="全部域名"
+                                @update:model-value="setDomainFilter"
+                            />
                         </div>
                     </div>
 
@@ -731,38 +719,14 @@ function showNotice(message) {
 <style scoped>
 /* 目标域名下拉：与状态分段控件同一行，右侧对齐；移动端独占一行 */
 .domain-filter {
-    position: relative;
-}
-
-.domain-select {
-    width: auto;
-    min-width: 190px;
-    max-width: 280px;
-    height: 44px;
-    min-height: 44px;
-    padding: 0 34px 0 12px;
-    font-size: var(--text-sm);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: pointer;
-    appearance: none;
-}
-
-.domain-filter-chevron {
-    position: absolute;
-    top: 50%;
-    right: 12px;
-    width: 14px;
-    height: 14px;
-    transform: translateY(-50%);
-    color: var(--color-text-tertiary);
-    pointer-events: none;
+    width: clamp(200px, 18vw, 280px);
+    margin-left: auto;
 }
 
 @media (max-width: 639.98px) {
-    .domain-select {
+    .domain-filter {
         width: 100%;
-        max-width: none;
+        margin-left: 0;
     }
 }
 </style>
