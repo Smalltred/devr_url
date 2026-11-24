@@ -41,7 +41,7 @@ apple-frontend/
     │   ├── spring.js     弹簧引擎（可中断、速度移交、子步进稳定积分）
     │   ├── project.js    动量投射 + 橡皮筋 + 提交判定
     │   └── gestures.js   Pointer 拖拽跟踪 + 速度历史
-    ├── components/       按钮 / 分段控件 / Sheet / Toast / 开关 / 图表
+    ├── components/       按钮 / 分段控件 / 下拉选择 / Sheet / Toast / 开关 / 图表
     ├── home/             首页三件套
     └── admin/            登录 / 列表 / 设置 / 三个 Sheet
 ```
@@ -56,6 +56,10 @@ apple-frontend/
 **响应感**：按钮在 `pointerdown` 即反馈，不等 `click`。
 
 **分段控件**：选中块是真实元素，由弹簧驱动滑动，可在滑动途中反向。
+
+**下拉选择**：不用原生 `<select>`——它的展开层由系统绘制，无法跟随浅/深主题。
+自绘 `AppSelect` 保留 select-only combobox 语义（`role=listbox/option`、`aria-activedescendant`），
+支持点击外部 / Esc / Tab 关闭，上下键、Home/End 移动，Enter/空格选中。
 
 **弹窗 → Sheet**：可下滑关闭，1:1 跟手、越界橡皮筋、释放时用投影决定关闭或弹回；
 点击遮罩空白处关闭（关闭处理挂在压暗层自身——它铺满整个遮罩区，事件不会冒泡到父容器）；
