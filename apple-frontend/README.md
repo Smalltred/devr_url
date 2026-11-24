@@ -91,10 +91,10 @@ regular/thin 材质层——两层半透明背景会互相干扰、降低对比�
 
 | 首页（浅/深） | 生成结果 | 管理后台（浅/深） |
 | --- | --- | --- |
-| ![](../docs/apple-frontend/apple-home-light.png) | ![](../docs/apple-frontend/apple-home-result.png) | ![](../docs/apple-frontend/apple-admin-links-light.png) |
-| ![](../docs/apple-frontend/apple-home-dark.png) | ![](../docs/apple-frontend/apple-login-light.png)（登录页） | ![](../docs/apple-frontend/apple-admin-links-dark.png) |
+| ![](https://github.com/Smalltred/devr_url/raw/master/docs/apple-frontend/apple-home-light.png) | ![](https://github.com/Smalltred/devr_url/raw/master/docs/apple-frontend/apple-home-result.png) | ![](https://github.com/Smalltred/devr_url/raw/master/docs/apple-frontend/apple-admin-links-light.png) |
+| ![](https://github.com/Smalltred/devr_url/raw/master/docs/apple-frontend/apple-home-dark.png) | ![](https://github.com/Smalltred/devr_url/raw/master/docs/apple-frontend/apple-login-light.png)（登录页） | ![](https://github.com/Smalltred/devr_url/raw/master/docs/apple-frontend/apple-admin-links-dark.png) |
 
-更多截图见 [docs/apple-frontend/](../docs/apple-frontend/)：设置页（`apple-admin-settings-*`）
+更多截图见 [docs/apple-frontend/](https://github.com/Smalltred/devr_url/tree/master/docs/apple-frontend)：设置页（`apple-admin-settings-*`）
 与统计 Sheet（`apple-stats-sheet-*`）。
 
 ## 与旧前端的差异
