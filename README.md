@@ -11,9 +11,9 @@ Demo 地址 👉 [u.hecady.com](https://u.hecady.com)
 > - **外链巡检在进程内定时执行**，不再需要外部 cron / supervisord 定时器；
 > - 前端已用 Vue 3 + Vite 重写，视觉与交互保持一致。
 
-![首页 · 浅色主题](https://github.com/Smalltred/devr_url/raw/master/docs/screenshot-home-light.png)
+![首页 · 浅色主题](https://cdn.jsdelivr.net/gh/Smalltred/devr_url@master/docs/screenshot-home-light.png)
 
-![首页 · 深色主题](https://github.com/Smalltred/devr_url/raw/master/docs/screenshot-home-dark.png)
+![首页 · 深色主题](https://cdn.jsdelivr.net/gh/Smalltred/devr_url@master/docs/screenshot-home-dark.png)
 
 ## 功能特性
 
@@ -162,7 +162,7 @@ VITE_SITE_URL=https://your-domain.com
 
 ### 设置页
 
-![管理后台 · 设置页](https://github.com/Smalltred/devr_url/raw/master/docs/screenshot-admin-settings.png)
+![管理后台 · 设置页](https://cdn.jsdelivr.net/gh/Smalltred/devr_url@master/docs/screenshot-admin-settings.png)
 
 「设置」选项卡提供运行时配置（**改动即自动保存**，即时生效，存于 SQLite，无需改环境变量重启）：
 
